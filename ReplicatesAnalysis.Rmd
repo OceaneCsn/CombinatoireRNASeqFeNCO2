@@ -1,0 +1,112 @@
+---
+title: "Homogénéité des réplicats RNA Seq combinatoire"
+author: "Océane Cassan"
+date: "10/25/2019"
+output: 
+  rmdformats::material:
+    fig_width: 12
+    highlight: kate
+    includes:
+        after_body: footer.html
+---
+#rmarkdown::render("ClusteringCoseq.Rmd")
+```{r knitr_init, echo=FALSE, cache=FALSE}
+library(knitr, warn.conflicts = F, quietly = T)
+library(rmdformats, warn.conflicts = F, quietly = T)
+
+## Global options
+options(max.print="75")
+opts_chunk$set(cache=FALSE,
+               prompt=FALSE,
+               tidy=TRUE,
+               comment=NA,
+               message=FALSE,
+               warning=FALSE,
+               fig.align = "center")
+opts_knit$set(width=75)
+setwd("~/Documents/Combinatoire/")
+suppressMessages(library(ggplot2))
+suppressMessages(library(coseq))
+suppressMessages(library(dplyr, warn.conflicts = F, quietly = T))
+suppressMessages(library(ade4, warn.conflicts = F, quietly = T))
+suppressMessages(library(adegraphics, warn.conflicts = F, quietly = T))
+suppressMessages(library(clusterProfiler, warn.conflicts = F, quietly = T))
+suppressMessages(library(rlist, warn.conflicts = F, quietly = T))
+suppressMessages(library(GGally, warn.conflicts = F, quietly = T))
+suppressMessages(library(gridExtra, warn.conflicts = F, quietly = T))
+
+```
+
+On cherche à construire un réseau de régulation, sur les gènes qui ont été détectés comme différentiellement exprimés lors du traitement au KNO3 des plantes WT.
+
+# Etude de la quantification
+```{r amb}
+data <- read.csv("quantif_At.csv", h = T, sep = ',')
+rownames(data) <- data$Gene
+genes = which(!(grepl("__", rownames(data))))
+data = data[genes,]
+
+
+```
+Voir les gènes non quantifiés aussi, combien, paraît beaucoup
+
+# Homogénéité des réplicats : visualisation
+
+```{r corplots}
+
+annot <- read.csv("Code_for_RNAseq_CO2_N_Fr.csv", h = T, sep = ';')
+
+conditions <- as.vector(unique(annot$Sample))
+annot$condition <- substr(conditions, 1, nchar(conditions)-1)
+
+cond <- unique(substr(conditions, 1, nchar(conditions)-1))
+cond <- cond[grepl("At", cond)]
+
+cor_diff <- c()
+cor_same <- c()
+
+scatter <- function(df, x, y){
+  sp <- ggplot(df, aes(log(df[,x]), log(df[,y]))) + geom_bin2d(bins = 70) + scale_fill_gradient2() + theme(legend.position = "none") + labs(x = x, y = y)
+  return(sp)
+}
+for(co in cond){
+  print(co)
+  samples <- paste0("R",annot[annot$condition == co,]$Code)
+  df <- data[,samples]
+  a <- scatter(df, samples[1], samples[2])
+  b <- scatter(df, samples[1], samples[3])
+  c <- scatter(df, samples[2], samples[3])
+  grid.arrange(a,b,c, ncol = 3)
+  
+  cor_same <- c(cor_same, cor(df[, samples[1]], df[, samples[2]]), 
+                cor(df[, samples[1]], df[, samples[3]]),
+                cor(df[, samples[2]], df[, samples[3]]))
+  
+  other <- paste0("R",annot[annot$condition != co & ! grepl("Sl",annot$Sample),]$Code)
+  print(other)
+  for(o in other){
+    print(data[,o])
+    cor_diff <- c(cor_diff, cor(data[,o], df[, samples[1]]))
+  }
+}
+
+
+```
+
+# Homogénéité des réplicats : significativité
+
+On cherche maintenant à voir si ces plots montrent suffisamment corrélés pour montrer que les réplicats au sein d'une même condition sont suffisamment similaires. On peut déjà vérifier en plottant deux réplicats de conditions différentes : on voit que le scatter plot est plus dispersé que les réplicats biologiques.
+
+```{r stats}
+
+scatter(data, "R1", "R22")
+
+cors = data.frame("Different conditions" = cor_diff, "Same conditions" = cor_same)
+
+library(reshape2)
+cors <- melt(cors)
+
+p<-ggplot(cors, aes(x=value,  fill=variable)) +
+  geom_density(alpha=0.4) + ggtitle("Distribution des corrélations entre les réplicats, biologiques ou non")
+p
+```
