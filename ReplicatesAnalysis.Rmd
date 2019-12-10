@@ -34,7 +34,6 @@ suppressMessages(library(clusterProfiler, warn.conflicts = F, quietly = T))
 suppressMessages(library(rlist, warn.conflicts = F, quietly = T))
 suppressMessages(library(GGally, warn.conflicts = F, quietly = T))
 suppressMessages(library(gridExtra, warn.conflicts = F, quietly = T))
-
 ```
 
 On cherche à construire un réseau de régulation, sur les gènes qui ont été détectés comme différentiellement exprimés lors du traitement au KNO3 des plantes WT.
@@ -44,11 +43,82 @@ On cherche à construire un réseau de régulation, sur les gènes qui ont été
 data <- read.csv("quantif_At.csv", h = T, sep = ',')
 rownames(data) <- data$Gene
 genes = which(!(grepl("__", rownames(data))))
+not_quant = data[which((grepl("__", rownames(data)))),]
 data = data[genes,]
 
+Quant_genes = sum()
+res = data.frame("No_features" = as.numeric(as.vector(not_quant["__no_feature",grepl("R", colnames(not_quant))])), "Ambiguous" = as.numeric(as.vector(not_quant["__ambiguous",grepl("R", colnames(not_quant))])), "Alignment_not_unique" = as.numeric(as.vector(not_quant["__alignment_not_unique",grepl("R", colnames(not_quant))])), "QuantGenes" = colSums(data[,grepl("R", colnames(data))]))
 
+library(reshape2)
+resMetlted <- melt(res)
+
+p<-ggplot(resMetlted, aes(x = variable, y = value, fill=variable)) +
+  geom_boxplot( alpha=0.4) + ggtitle("Nombre de reads par catégorie après quantification") + geom_jitter(width=0.1,alpha=0.2)
+p
 ```
-Voir les gènes non quantifiés aussi, combien, paraît beaucoup
+Il semble qu'il y ait beaucoup de gènes ambigus pour htseq-count : cela se produit quant une coordonnée génomique chevauche plusieurs gènes.
+Peut être qu'on a de grands reads, et qu'ils chevauchent souvent les UTR des autres?
+
+
+On refait l'analyse avec un autre pipeline (Cutadapt, Hisat2, Stringtie) et on observe la somme des counts par échantillons.
+
+```{r quantStrngtie}
+dataS <- read.csv("quantifStringtie.csv", h = T, sep = ',')
+rownames(dataS) <- dataS$gene_id
+
+res$QuantGenesStringtie = colSums(dataS[,grepl("R", colnames(dataS))])
+
+library(reshape2)
+res <- melt(res)
+
+p<-ggplot(res, aes(x = variable, y = value, fill=variable)) +
+  geom_boxplot( alpha=0.4) + ggtitle("Nombre de reads par catégorie après quantification") + geom_jitter(width=0.1,alpha=0.2)
+p
+```
+On en conclue que Stringtie ne s'embête pas et compte les reads chevauchants pour chaque partie chevauchée, expliquant ce plus grand nombre de reads quantifiés.
+
+
+On affiche la même chose pour mon htseq-count sur l'alignement de Hisat2 : 
+```{r htseqHisat2}
+data <- read.csv("quantifHtseqHisat.csv", h = T, sep = ',')
+rownames(data) <- data$Gene
+genes = which(!(grepl("__", rownames(data))))
+not_quant = data[which((grepl("__", rownames(data)))),]
+data = data[genes,]
+
+Quant_genes = sum()
+res = data.frame("No_features" = as.numeric(as.vector(not_quant["__no_feature",grepl("R", colnames(not_quant))])), "Ambiguous" = as.numeric(as.vector(not_quant["__ambiguous",grepl("R", colnames(not_quant))])), "Alignment_not_unique" = as.numeric(as.vector(not_quant["__alignment_not_unique",grepl("R", colnames(not_quant))])), "QuantGenes" = colSums(data[,grepl("R", colnames(data))]))
+
+library(reshape2)
+resMetlted <- melt(res)
+
+p<-ggplot(resMetlted, aes(x = variable, y = value, fill=variable)) +
+  geom_boxplot( alpha=0.4) + ggtitle("Nombre de reads par catégorie après quantification") + geom_jitter(width=0.1,alpha=0.2)
+p
+```
+
+On compare htseq-count avec l'option nonunique all, qui doit faire comme stringtie.
+
+On essaie de faire un mapping plus stringent avec STAR en autorisant que deux mismatchs, mais on a des résultats très très similaires : 
+
+```{r str}
+data <- read.csv("quantif_At_Stringent.csv", h = T, sep = ',')
+rownames(data) <- data$Gene
+genes = which(!(grepl("__", rownames(data))))
+not_quant = data[which((grepl("__", rownames(data)))),]
+data = data[genes,]
+
+Quant_genes = sum()
+res = data.frame("No_features" = as.numeric(as.vector(not_quant["__no_feature",grepl("R", colnames(not_quant))])), "Ambiguous" = as.numeric(as.vector(not_quant["__ambiguous",grepl("R", colnames(not_quant))])), "Alignment_not_unique" = as.numeric(as.vector(not_quant["__alignment_not_unique",grepl("R", colnames(not_quant))])), "QuantGenes" = colSums(data[,grepl("R", colnames(data))]))
+
+library(reshape2)
+resMetlted <- melt(res)
+
+p<-ggplot(resMetlted, aes(x = variable, y = value, fill=variable)) +
+  geom_boxplot( alpha=0.4) + ggtitle("Nombre de reads par catégorie après quantification") + geom_jitter(width=0.1,alpha=0.2)
+p
+```
+La seule différence est qu'on a supprimé les outliers supérieurs dans la quatégorie des gènes quantifiés.
 
 # Homogénéité des réplicats : visualisation
 
@@ -83,14 +153,10 @@ for(co in cond){
                 cor(df[, samples[2]], df[, samples[3]]))
   
   other <- paste0("R",annot[annot$condition != co & ! grepl("Sl",annot$Sample),]$Code)
-  print(other)
   for(o in other){
-    print(data[,o])
-    cor_diff <- c(cor_diff, cor(data[,o], df[, samples[1]]))
+    cor_diff <- c(cor_diff, cor(data[,o], df[, samples[1]]), cor(data[,o], df[, samples[2]]))
   }
 }
-
-
 ```
 
 # Homogénéité des réplicats : significativité
@@ -98,7 +164,6 @@ for(co in cond){
 On cherche maintenant à voir si ces plots montrent suffisamment corrélés pour montrer que les réplicats au sein d'une même condition sont suffisamment similaires. On peut déjà vérifier en plottant deux réplicats de conditions différentes : on voit que le scatter plot est plus dispersé que les réplicats biologiques.
 
 ```{r stats}
-
 scatter(data, "R1", "R22")
 
 cors = data.frame("Different conditions" = cor_diff, "Same conditions" = cor_same)

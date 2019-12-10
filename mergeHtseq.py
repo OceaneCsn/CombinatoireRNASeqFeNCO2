@@ -19,4 +19,4 @@ for sample in samples[1:]:
     df = df.merge(tmp, right_index = True, left_index = True)
 
 print(df)
-df.to_csv("./quantif_At.csv", index=True, header=True)
+df.to_csv(sys.argv[2], index=True, header=True)
