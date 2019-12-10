@@ -24,7 +24,7 @@ opts_chunk$set(cache=FALSE,
                warning=FALSE,
                fig.align = "center")
 opts_knit$set(width=75)
-setwd("~/Documents/Combinatoire/")
+setwd("~/Documents/CombinatoireFeNCO2/Combinatoire/")
 suppressMessages(library(ggplot2))
 suppressMessages(library(coseq))
 suppressMessages(library(dplyr, warn.conflicts = F, quietly = T))
@@ -40,7 +40,7 @@ On cherche à construire un réseau de régulation, sur les gènes qui ont été
 
 # Etude de la quantification
 ```{r amb}
-data <- read.csv("quantif_At.csv", h = T, sep = ',')
+data <- read.csv("quantifFiles/quantif_At.csv", h = T, sep = ',')
 rownames(data) <- data$Gene
 genes = which(!(grepl("__", rownames(data))))
 not_quant = data[which((grepl("__", rownames(data)))),]
@@ -63,7 +63,7 @@ Peut être qu'on a de grands reads, et qu'ils chevauchent souvent les UTR des au
 On refait l'analyse avec un autre pipeline (Cutadapt, Hisat2, Stringtie) et on observe la somme des counts par échantillons.
 
 ```{r quantStrngtie}
-dataS <- read.csv("quantifStringtie.csv", h = T, sep = ',')
+dataS <- read.csv("quantifFiles/quantifStringtie.csv", h = T, sep = ',')
 rownames(dataS) <- dataS$gene_id
 
 res$QuantGenesStringtie = colSums(dataS[,grepl("R", colnames(dataS))])
@@ -80,7 +80,7 @@ On en conclue que Stringtie ne s'embête pas et compte les reads chevauchants po
 
 On affiche la même chose pour mon htseq-count sur l'alignement de Hisat2 : 
 ```{r htseqHisat2}
-data <- read.csv("quantifHtseqHisat.csv", h = T, sep = ',')
+data <- read.csv("quantifFiles/quantifHtseqHisat.csv", h = T, sep = ',')
 rownames(data) <- data$Gene
 genes = which(!(grepl("__", rownames(data))))
 not_quant = data[which((grepl("__", rownames(data)))),]
@@ -102,7 +102,7 @@ On compare htseq-count avec l'option nonunique all, qui doit faire comme stringt
 On essaie de faire un mapping plus stringent avec STAR en autorisant que deux mismatchs, mais on a des résultats très très similaires : 
 
 ```{r str}
-data <- read.csv("quantif_At_Stringent.csv", h = T, sep = ',')
+data <- read.csv("quantifFiles/quantif_At_Stringent.csv", h = T, sep = ',')
 rownames(data) <- data$Gene
 genes = which(!(grepl("__", rownames(data))))
 not_quant = data[which((grepl("__", rownames(data)))),]
@@ -119,6 +119,46 @@ p<-ggplot(resMetlted, aes(x = variable, y = value, fill=variable)) +
 p
 ```
 La seule différence est qu'on a supprimé les outliers supérieurs dans la quatégorie des gènes quantifiés.
+
+## La bonne quantification
+
+On a un soucis dans l'annotation : on a plusieurs features par transcrit! Les versions .1, .2, se chevauchaient tout le temps, problème repéré par visu dans igv. On choisit donc un seul transcrit par gène, et on re-quantifie.
+
+```{r good}
+
+data <- read.csv("quantifFiles/quantifNewAnnot.csv", h = T, sep = ',')
+rownames(data) <- data$Gene
+genes = which(!(grepl("__", rownames(data))))
+not_quant = data[which((grepl("__", rownames(data)))),]
+data = data[genes,]
+
+Quant_genes = sum()
+res = data.frame("No_features" = as.numeric(as.vector(not_quant["__no_feature",grepl("R", colnames(not_quant))])), "Ambiguous" = as.numeric(as.vector(not_quant["__ambiguous",grepl("R", colnames(not_quant))])), "Alignment_not_unique" = as.numeric(as.vector(not_quant["__alignment_not_unique",grepl("R", colnames(not_quant))])), "QuantGenes" = colSums(data[,grepl("R", colnames(data))]))
+
+library(reshape2)
+resMetlted <- melt(res)
+
+p<-ggplot(resMetlted, aes(x = variable, y = value, fill=variable)) +
+  geom_boxplot( alpha=0.4) + ggtitle("Nombre de reads par catégorie après quantification") + geom_jitter(width=0.1,alpha=0.2)
+p
+
+data <- read.csv("quantifFiles/quantifGenes.csv", h = T, sep = ',')
+rownames(data) <- data$Gene
+genes = which(!(grepl("__", rownames(data))))
+not_quant = data[which((grepl("__", rownames(data)))),]
+data = data[genes,]
+
+Quant_genes = sum()
+res = data.frame("No_features" = as.numeric(as.vector(not_quant["__no_feature",grepl("R", colnames(not_quant))])), "Ambiguous" = as.numeric(as.vector(not_quant["__ambiguous",grepl("R", colnames(not_quant))])), "Alignment_not_unique" = as.numeric(as.vector(not_quant["__alignment_not_unique",grepl("R", colnames(not_quant))])), "QuantGenes" = colSums(data[,grepl("R", colnames(data))]))
+
+library(reshape2)
+resMetlted <- melt(res)
+
+p<-ggplot(resMetlted, aes(x = variable, y = value, fill=variable)) +
+  geom_boxplot( alpha=0.4) + ggtitle("Nombre de reads par catégorie après quantification") + geom_jitter(width=0.1,alpha=0.2)
+p
+
+```
 
 # Homogénéité des réplicats : visualisation
 
@@ -175,3 +215,6 @@ p<-ggplot(cors, aes(x=value,  fill=variable)) +
   geom_density(alpha=0.4) + ggtitle("Distribution des corrélations entre les réplicats, biologiques ou non")
 p
 ```
+
+Nous pouvons donc en conclure que nous réplcats on bien été labelisés, et qu'ils sont plus homogènes au sein d'une même condition qu'entre différentes conditions de la combinatoire.
+Il semblerait que nous puissions passer à la suite : analyse stat pour l'expression différentielle.
