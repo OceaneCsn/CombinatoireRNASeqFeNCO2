@@ -1,0 +1,205 @@
+---
+title: "Analyse d'expression différentielle mutli-facteurs : Fer, Azote et CO2"
+author: "Océane Cassan"
+date: "10/25/2019"
+output: 
+  rmdformats::material:
+    fig_width: 12
+    highlight: kate
+    includes:
+        after_body: footer.html
+---
+
+On cherche à étudier l'effet de trois facteurs sur le transcriptome des racines d'Arabidopsis.
+On cherche ici à utiliser et comparer différents packages de multiDE sur nos données.
+
+
+```{r knitr_init, echo=FALSE, cache=FALSE}
+library(knitr, warn.conflicts = F, quietly = T)
+library(rmdformats, warn.conflicts = F, quietly = T)
+
+## Global options
+options(max.print="75")
+opts_chunk$set(cache=FALSE,
+               prompt=FALSE,
+               tidy=TRUE,
+               comment=NA,
+               message=FALSE,
+               warning=FALSE,
+               fig.align = "center")
+opts_knit$set(width=75)
+setwd("~/Documents/CombinatoireFeNCO2/Combinatoire/")
+suppressMessages(library(ggplot2))
+library(gridExtra)
+suppressMessages(library(coseq))
+suppressMessages(library(stringr, warn.conflicts = F, quietly = T))
+suppressMessages(library(ggpubr, warn.conflicts = F, quietly = T))
+suppressMessages(library(ggplot2, warn.conflicts = F, quietly = T))
+suppressMessages(library(knitr, warn.conflicts = F, quietly = T))
+suppressMessages(library(TCC, warn.conflicts = F, quietly = T))
+```
+
+# Import des données
+
+```{r data}
+data <- read.csv("quantifFiles/quantifGenes.csv", h = T, sep = ',')
+rownames(data) <- data$Gene
+genes = which(!(grepl("__", rownames(data))))
+not_quant = data[which((grepl("__", rownames(data)))),]
+data = data[genes,grepl('R', colnames(data))]
+head(data)
+dim(data)
+
+annot <- read.csv("Code_for_RNAseq_CO2_N_Fr.csv", h = T, sep = ';')
+conditions <- as.vector(unique(annot$Sample))
+annot$ID <- paste0('R', annot$Code)
+
+annot$condition <- substr(conditions, 1, nchar(conditions)-1)
+cond <- unique(substr(conditions, 1, nchar(conditions)-1))
+cond <- cond[grepl("At", cond)]
+
+getCondition <- function(id){
+  return(annot[annot$ID == id, "condition"])
+}
+
+getExactCondition <- function(id){
+  return(annot[annot$ID == id, "Sample"])
+}
+
+getLabel <- function(id){
+  text <- as.vector(annot[annot$ID == id, "Sample"])
+  res <- ''
+  nb <- substr(text, nchar(text), nchar(text))
+  if(grepl("Ambient", text)){res = paste0(res, "c")}
+  else{res = paste0(res, "C")}
+  if(grepl("High", text)){res = paste0(res, "N")}
+  else{res = paste0(res, "n")}
+  if(grepl("Starv", text)){res = paste0(res, "f")}
+  else{res = paste0(res, "F")}
+  res = paste0(res, "_", nb)
+  return(res)
+}
+
+getLabel("R6")
+getExactCondition("R4")
+```
+
+# TCC (Tag Count Comparison)
+
+TCC is an R package that provides a series of functions for differential expression analysis of tag count data. The package incorporates multi-step normalization methods, whose strategy is to remove potential DEGs before performing the data normalization. The normalization function based on this DEG elimination strategy (DEGES) includes (i) the original TbT method based on DEGES for two-group data with or without replicates, (ii) much faster methods for two-group data with or without replicates, and (iii) methods for multi-group comparison. TCC provides a simple unified interface to perform such analyses with combinations of functions provided by edgeR, DESeq, and baySeq.
+
+On crée l'objet TCC avec le design souhaité, et on filtre les gènes avec de faibles expressions (paramètre low.count).
+
+Lors de la normalisation (DEGES,iedgeR), on fait un premier calcul des gènes DE, pour pouvoir les enlever lors de la normalisation. Le maramètre test.method permet de choisir la manière de détecter les genes DE (edgeR, DEsqe2, ou tBt (très long)).
+On peut répéter cette procédure jusqu'à la convergence des facteurs de taille des librairies, d'ou le i.
+
+```{r tcc, cache=T}
+#design
+
+keep <- rowSums(data) >= 10
+data <- data[keep,]
+group <- sapply(colnames(data), getCondition)
+colnames(data) <- sapply(colnames(data), getLabel)
+tcc <- new("TCC", data, group)
+tcc
+tcc <- filterLowCountGenes(tcc, low.count = 10)
+
+#Normalisation
+tcc <- calcNormFactors(tcc, norm.method = "tmm", test.method = "edger",                      iteration = 3, FDR = 0.1, floorPDEG = 0.05)
+tcc$norm.factors
+tcc$DEGES$execution.time
+
+s <- sample(rownames(tcc$count), size = 200)
+heatmap(as.matrix(tcc$count[s,]), main = "Before normalisation")
+normalized.count <- getNormalizedData(tcc)
+heatmap(as.matrix(normalized.count[s,]), main = "After normalisation")
+
+#DEtest
+tcc <- estimateDE(tcc, test.method = "edger", FDR = 0.01)
+result <- getResult(tcc, sort = TRUE)
+DEgenes <- subset(result,estimatedDEG==1)
+print(paste(dim(DEgenes)[1], " genes DE"))
+top = DEgenes[1:5000,]
+head(result)
+plot(tcc, ylim = c(-11, 11), main = "Nitrate effect en conditions normales")
+plot(tcc, group = c("At_AmbientCO2_HighNitrate_Fe","At_ElevatedCO2_HighNitrate_Fe"), main = "Effet CO2 en conditions normales", ylim = c(-11, 11))
+
+plot(tcc, group = c("At_AmbientCO2_HighNitrate_FeStarvation","At_ElevatedCO2_HighNitrate_FeStarvation"), main = "Effet CO2 en Fe starvation", ylim = c(-11, 11))
+
+plot(tcc, group = c("At_AmbientCO2_LowNitrate_Fe","At_ElevatedCO2_LowNitrate_Fe"), main = "Effet CO2 en low Nitrate", ylim = c(-11, 11))
+
+plot(tcc, group = c("At_AmbientCO2_HighNitrate_Fe","At_AmbientCO2_HighNitrate_FeStarvation"), main = "Effet Fe en conditions normales", ylim = c(-11, 11))
+
+plot(tcc, group = c("At_AmbientCO2_LowNitrate_FeStarvation","At_AmbientCO2_HighNitrate_FeStarvation"), main = "Effet Nitrate en Fe starvation", ylim = c(-11, 11))
+
+mat <- as.matrix(normalized.count[top$gene_id,])
+heatmap(mat)
+          
+# ggplot(melted_res, aes(Var2, Var1, fill= log(value))) + 
+#   geom_tile() +
+#   scale_fill_distiller(palette = "RdPu") +
+#   theme(axis.text.x = element_text(size = 0.5, angle = 320,
+#                                    hjust = 0, colour = "grey50"))
+# library(viridis)
+# heatmap <- ggplot(melted_res, aes(Var2, Var1, fill= log(value))) + geom_raster() + scale_fill_viridis(trans="sqrt") + theme(axis.text.x=element_text(angle=65, hjust=1), axis.text.y=element_blank(), axis.ticks.y=element_blank())
+# heatmap
+```
+
+
+Il semble que l'effet du fer soit le plus fort, et celui qui amplifie les autres effets.
+La technique utilisée ici identifie des DEG globalement, sans séparer lesquels sont dûs à quel effet.
+
+# Clustering sur les gènes DE
+
+```{r coseq,cache=T}
+DEgenes = DEgenes$gene_id
+data <- data[DEgenes,]
+rowSums(data)
+conds <- str_split_fixed(colnames(data), '_', 2)[,1]
+run_pois <- coseq(data, conds=conds, K=4:12, model="Poisson",iter = 5, transformation = "none")
+coseq::plot(run_pois)
+summary(run_pois)
+clusters_per_genes <- clusters(run_pois)
+```
+
+# ACP
+
+On représente le clustering dans la plan principal d'une ACP
+
+```{r adeACP}
+
+suppressMessages(library(ade4, warn.conflicts = F, quietly = T))
+suppressMessages(library(adegraphics, warn.conflicts = F, quietly = T))
+
+acp <- dudi.pca(log(data[,colnames(data)!="cluster"]+0.1), center = TRUE, scale = TRUE, scannf = FALSE, nf = 4)
+summary(acp)
+library("RColorBrewer")
+
+data$cluster = clusters_per_genes[as.vector(rownames(data))]
+s.corcircle(acp$co, xax=1, yax=2, fullcircle = FALSE, pback.col = "lightgrey")
+
+adegraphics::s.class(acp$li, xax =  1, yax = 2, as.factor(data$cluster), labels = as.character(levels(as.factor(data$cluster))), col = brewer.pal(n = 10, name = "Paired"), chullSize = 1, ellipseSize = 0, plabels.cex = 0.7, pbackground.col = "grey85", main = "Clusters dans le plan principal", ylim = c(-9, 9))
+
+
+
+data$cluster = clusters_per_genes[as.vector(rownames(data))]
+s.corcircle(acp$co, xax=2, yax=3, fullcircle = FALSE, pback.col = "lightgrey")
+
+adegraphics::s.class(acp$li, xax =  2, yax = 3, as.factor(data$cluster), labels = as.character(levels(as.factor(data$cluster))), col = brewer.pal(n = 10, name = "Paired"), chullSize = 1, ellipseSize = 0, plabels.cex = 0.7, pbackground.col = "grey85", main = "Clusters dans le plan principal", ylim = c(-9, 9))
+#insert(g2, g5, posi = c(0.65, 0.65, 0.95, 0.95))
+
+data$cluster = clusters_per_genes[as.vector(rownames(data))]
+s.corcircle(acp$co, xax=2, yax=3, fullcircle = FALSE, pback.col = "lightgrey")
+
+adegraphics::s.class(acp$li, xax =  2, yax = 3, as.factor(data$cluster), labels = as.character(levels(as.factor(data$cluster))), col = brewer.pal(n = 10, name = "Paired"), chullSize = 1, ellipseSize = 0, plabels.cex = 0.7, pbackground.col = "grey85", main = "Clusters dans le plan principal", ylim = c(-9, 9))
+#insert(g2, g5, posi = c(0.65, 0.65, 0.95, 0.95))
+```
+Il semblerait que l'ACP détecte dans un premier temps (avec le premier vecteur principal) la valeur moyenne d'expression, puis l'expression diff induite par le fer.
+
+On peut faire des représentations dans le plan des seconds et troisième axes principaux (le premier traduit le fer, le second la carence en nitrate).
+
+Sur le cercle de corrélations dans le plan 2 et 3, on voit bien que lorsque la carence fer est là, on peut différencier un effet nitrate. Le CO2 est, lui encore difficile à identifier.
+
+# MultiDCOX
+
+# DESeq2
