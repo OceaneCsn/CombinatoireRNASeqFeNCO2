@@ -105,7 +105,7 @@ tcc
 tcc <- filterLowCountGenes(tcc, low.count = 10)
 
 #Normalisation
-tcc <- calcNormFactors(tcc, norm.method = "tmm", test.method = "edger",                      iteration = 3, FDR = 0.1, floorPDEG = 0.05)
+tcc <- calcNormFactors(tcc, norm.method = "tmm", test.method = "edger",                      iteration = 1, FDR = 0.1, floorPDEG = 0.05)
 tcc$norm.factors
 tcc$DEGES$execution.time
 
@@ -115,7 +115,7 @@ normalized.count <- getNormalizedData(tcc)
 heatmap(as.matrix(normalized.count[s,]), main = "After normalisation")
 
 #DEtest
-tcc <- estimateDE(tcc, test.method = "edger", FDR = 0.01)
+tcc <- estimateDE(tcc, test.method = "edger", FDR = 0.001)
 result <- getResult(tcc, sort = TRUE)
 DEgenes <- subset(result,estimatedDEG==1)
 print(paste(dim(DEgenes)[1], " genes DE"))
@@ -151,6 +151,8 @@ La technique utilisée ici identifie des DEG globalement, sans séparer lesquels
 
 # Clustering sur les gènes DE
 
+On utilise des modèles de mélange pour regrouper les gènes ayant des profils d'expression similaires dans les différentes conditions.
+
 ```{r coseq,cache=T}
 DEgenes = DEgenes$gene_id
 data <- data[DEgenes,]
@@ -182,24 +184,124 @@ adegraphics::s.class(acp$li, xax =  1, yax = 2, as.factor(data$cluster), labels 
 
 
 
-data$cluster = clusters_per_genes[as.vector(rownames(data))]
 s.corcircle(acp$co, xax=2, yax=3, fullcircle = FALSE, pback.col = "lightgrey")
 
 adegraphics::s.class(acp$li, xax =  2, yax = 3, as.factor(data$cluster), labels = as.character(levels(as.factor(data$cluster))), col = brewer.pal(n = 10, name = "Paired"), chullSize = 1, ellipseSize = 0, plabels.cex = 0.7, pbackground.col = "grey85", main = "Clusters dans le plan principal", ylim = c(-9, 9))
-#insert(g2, g5, posi = c(0.65, 0.65, 0.95, 0.95))
 
-data$cluster = clusters_per_genes[as.vector(rownames(data))]
 s.corcircle(acp$co, xax=2, yax=3, fullcircle = FALSE, pback.col = "lightgrey")
 
 adegraphics::s.class(acp$li, xax =  2, yax = 3, as.factor(data$cluster), labels = as.character(levels(as.factor(data$cluster))), col = brewer.pal(n = 10, name = "Paired"), chullSize = 1, ellipseSize = 0, plabels.cex = 0.7, pbackground.col = "grey85", main = "Clusters dans le plan principal", ylim = c(-9, 9))
-#insert(g2, g5, posi = c(0.65, 0.65, 0.95, 0.95))
+
+s.corcircle(acp$co, xax=4, yax=2, fullcircle = FALSE, pback.col = "lightgrey")
+
+adegraphics::s.class(acp$li, xax =  4, yax = 2, as.factor(data$cluster), labels = as.character(levels(as.factor(data$cluster))), col = brewer.pal(n = 10, name = "Paired"), chullSize = 1, ellipseSize = 0, plabels.cex = 0.7, pbackground.col = "grey85", main = "Clusters dans le plan principal", ylim = c(-9, 9))
+
+s.corcircle(acp$co, xax=4, yax=3, fullcircle = FALSE, pback.col = "lightgrey")
+
+adegraphics::s.class(acp$li, xax =  4, yax = 3, as.factor(data$cluster), labels = as.character(levels(as.factor(data$cluster))), col = brewer.pal(n = 10, name = "Paired"), chullSize = 1, ellipseSize = 0, plabels.cex = 0.7, pbackground.col = "grey85", main = "Clusters dans le plan principal", ylim = c(-9, 9))
+
 ```
 Il semblerait que l'ACP détecte dans un premier temps (avec le premier vecteur principal) la valeur moyenne d'expression, puis l'expression diff induite par le fer.
 
 On peut faire des représentations dans le plan des seconds et troisième axes principaux (le premier traduit le fer, le second la carence en nitrate).
 
-Sur le cercle de corrélations dans le plan 2 et 3, on voit bien que lorsque la carence fer est là, on peut différencier un effet nitrate. Le CO2 est, lui encore difficile à identifier.
+Sur le cercle de corrélations dans le plan 2 et 3, on voit bien que lorsque la carence fer est là, on peut différencier un effet nitrate. Le CO2 est, lui encore difficile à identifier, le 4eme axe de l'ACP ne renseignant pas beaucoup...
 
-# MultiDCOX
 
-# DESeq2
+# Effet Nitrate en conditions normales
+
+```{r nitrate}
+dualDE <- function(labels, pval=0.01){
+  #data
+  d <- data[,grepl(labels[1], colnames(data)) | grepl(labels[2], colnames(data))]
+  y <- DGEList(counts=d, group =str_split_fixed(colnames(d), "_", 2)[,1])
+  y$samples
+  
+  #filtre
+  keep <- filterByExpr(y)
+  y <- y[keep, , keep.lib.sizes=FALSE]
+  
+  #normalisation
+  y <- calcNormFactors(y)
+  y$samples
+  norm <- cpm(y, normalized.lib.sizes=TRUE)
+  not_norm <- cpm(y, normalized.lib.sizes=FALSE)
+  rd_genes = sample(rownames(norm), 500)
+  heatmap(not_norm[rd_genes,], main = "Sans normalisation")
+  heatmap(norm[rd_genes,], main = "Avec normalisation")
+  
+  # estimation of dispersion and tests
+  y <- edgeR::estimateDisp(y)
+  et <- exactTest(y)
+  best = topTags(et, n = 10000)
+  best = best[best$table$FDR < pval,]
+  #best = best[abs(best$table$logFC) > 1,]
+  
+  #genes <- rownames(cpm(y, normalized.lib.sizes=TRUE))
+  DEgenes = rownames(best$table)
+  plotBCV(y)
+  
+  plotMD(et, p.value = pval)
+  abline(h=c(-1, 1), col="blue")
+  abline(h=c(0), col="red")
+  print(summary(decideTests(et, p.value = pval)))
+  
+  #plots
+  plotMDS(y, top = 100, col=rep(1:2, each=3))
+  logcpm <- cpm(y, log=TRUE)
+  heatmap(logcpm[DEgenes,])
+  print("ON SELECTIONNE AU TOTAL :")
+  print(paste(length(DEgenes), "genes with fdr < ", pval))
+}
+
+labels <- c("cnF", "cNF")
+dualDE(labels, pval = 0.01)
+```
+
+On retrouve une majorité de gènes activés par le fort nitrate. Les résultats sont un peu similaires à ceux du jeu de données d'entrainement de Nature entre témoin au KCl et Traitement au NO3.
+
+## Ontologies
+
+
+
+# Effet CO2
+
+## En conditions normales
+
+```{r co2}
+labels <- c("cNF", "CNF")
+dualDE(labels, pval = 0.01)
+```
+
+## En carence de nitrate
+```{r co2Nitra}
+labels <- c("cnF", "CnF")
+dualDE(labels, pval = 0.01)
+```
+
+## En carence en fer
+
+```{r co2Fe}
+labels <- c("cNf", "CNf")
+dualDE(labels, pval = 0.01)
+```
+
+## En carence des deux
+
+```{r co2FeNitra}
+labels <- c("cnf", "Cnf")
+dualDE(labels, pval = 0.01)
+```
+
+# Effet Fer en condtions normales
+
+```{r Fe}
+labels <- c("cNf", "cNF")
+dualDE(labels, pval = 0.01)
+```
+
+
+# Enrichement on ontologies des clusters
+
+
+A faire maybe soon
