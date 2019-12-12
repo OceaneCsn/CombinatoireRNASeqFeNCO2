@@ -39,6 +39,31 @@ suppressMessages(library(knitr, warn.conflicts = F, quietly = T))
 suppressMessages(library(TCC, warn.conflicts = F, quietly = T))
 ```
 
+# Rappel contexte
+
+Design, contrastes, et test DE
+Quelle différence avec une seule condition?
+
+EgdeR and DESeq2 Fit a negative binomial generalized log-linear model to the read counts for each gene. Conduct genewise statistical tests for a given coefficient or coefficient contrast.
+Ce modèle est de la forme
+
+$log(\mu_{gj}) \hat= \beta_o + \beta X$ knowming that $X \sim NB(\mu_{gj}, \sigma_g)$
+
+# Generalized linear modelsGeneralized linear models (GLMs)
+
+
+are an extension of classical linear models to nonnormallydistributed response data. GLMs specify probability distributions according to their mean-variance relationship, for example the quadratic mean-variance relationship specified above forread counts. Assuming that an estimate is available forφg, so the variance can be evaluatedfor any value ofμgi, GLM theory can be used to fit a log-linear modellogμgi=xTiβg+ logNifor each gene [22]. Herexiis a vector of covariates that specifies the treatment conditionsapplied to RNA samplei, andβgis a vector of regression coefficients by which the covariateeffects are mediated for geneg.  The quadratic variance function specifies the negativebinomial GLM distributional family. The use of the negative binomial distribution is equivalentto treating theπgias gamma distributed.
+
+
+# Estimating dispersionsFor general experiments (with multiple factors)
+
+
+edgeR uses the Cox-Reid profile-adjustedlikelihood (CR) method in estimating dispersions [22]. The CR method is derived to overcomethe limitations of the qCML method as mentioned above. It takes care of multiple factors byfitting generalized linear models (GLM) with a design matrix.The CR method is based on the idea of approximate conditional likelihood [?].  Given atable counts or aDGEListobject and the design matrix of the experiment, generalized linearmodels are fitted. This allows valid estimation of the dispersion, since all systematic sourcesof variation are accounted for.
+
+
+https://www.bioconductor.org/packages/release/bioc/vignettes/edgeR/inst/doc/edgeRUsersGuide.pdf
+
+
 # Import des données
 
 ```{r data}
@@ -95,7 +120,6 @@ On peut répéter cette procédure jusqu'à la convergence des facteurs de taill
 
 ```{r tcc, cache=T}
 #design
-
 keep <- rowSums(data) >= 10
 data <- data[keep,]
 group <- sapply(colnames(data), getCondition)
@@ -149,11 +173,72 @@ heatmap(mat)
 Il semble que l'effet du fer soit le plus fort, et celui qui amplifie les autres effets.
 La technique utilisée ici identifie des DEG globalement, sans séparer lesquels sont dûs à quel effet.
 
+# Analyse globale avec edgeR
+
+
+```{r edgeR,cache=F}
+#data
+d <- data[,!grepl("cluster", colnames(data) )]
+groups = str_split_fixed(colnames(d), "_", 2)[,1]
+
+str_split_fixed(colnames(d), "_", 2)[,1]
+
+design <- model.matrix(~0 + groups)
+
+colnames(design) <- str_split_fixed(colnames(design), "groups", 2)[,2]
+con <- makeContrasts((cnF - cnf), levels=design)
+
+
+fit <- glmQLFit(y, contrast = con)
+
+qlf.2vs1 <- glmQLFTest(fit)
+
+
+a = topTags(qlf.2vs1, n= 1000)
+a$table
+
+
+y <- DGEList(counts=d, group =groups)
+y$samples
+
+#filtre
+keep <- filterByExpr(y)
+y <- y[keep, , keep.lib.sizes=FALSE]
+
+#normalisation
+y <- calcNormFactors(y)
+y$samples
+norm <- cpm(y, normalized.lib.sizes=TRUE)
+not_norm <- cpm(y, normalized.lib.sizes=FALSE)
+rd_genes = sample(rownames(norm), 500)
+heatmap(not_norm[rd_genes,], main = "Sans normalisation")
+heatmap(norm[rd_genes,], main = "Avec normalisation")
+
+# estimation of dispersion and tests
+y <- edgeR::estimateDisp(y, contrast )
+et <- exactTest(y)
+best = topTags(et, n = 10000)
+best = best[best$table$FDR < pval,]
+#best = best[abs(best$table$logFC) > 1,]
+
+#genes <- rownames(cpm(y, normalized.lib.sizes=TRUE))
+DEgenes = rownames(best$table)
+plotBCV(y)
+
+plotMD(et, p.value = pval)
+abline(h=c(-1, 1), col="blue")
+abline(h=c(0), col="red")
+print(summary(decideTests(et, p.value = pval)))
+
+#plots
+plotMDS(y, top = 100)
+```
+
 # Clustering sur les gènes DE
 
 On utilise des modèles de mélange pour regrouper les gènes ayant des profils d'expression similaires dans les différentes conditions.
 
-```{r coseq,cache=T}
+```{r coseq,cache=F}
 DEgenes = DEgenes$gene_id
 data <- data[DEgenes,]
 rowSums(data)
