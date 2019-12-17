@@ -40,6 +40,9 @@ suppressMessages(library(TCC, warn.conflicts = F, quietly = T))
 suppressMessages(library(biomartr))
 suppressMessages(library(biomaRt))
 suppressMessages(library(ggplot2))
+suppressMessages(library(org.At.tair.db, warn.conflicts = F, quietly = T))
+suppressMessages(library(clusterProfiler, warn.conflicts = F, quietly = T))
+library(enrichplot)
 
 
 mart = useMart(biomart="plants_mart",host="plants.ensembl.org", dataset = "athaliana_eg_gene")
@@ -347,10 +350,9 @@ On peut faire des représentations dans le plan des seconds et troisième axes p
 
 Sur le cercle de corrélations dans le plan 2 et 3, on voit bien que lorsque la carence fer est là, on peut différencier un effet nitrate. Le CO2 est, lui encore difficile à identifier, le 4eme axe de l'ACP ne renseignant pas beaucoup...
 
+# Fonctions d'analyse pairwise
 
-# Effet Nitrate en conditions normales
-
-```{r nitrate}
+```{r funs}
 dualDE <- function(labels, pval=0.01){
   #data
   d <- data[,grepl(labels[1], colnames(data)) | grepl(labels[2], colnames(data))]
@@ -393,8 +395,10 @@ dualDE <- function(labels, pval=0.01){
   print("ON SELECTIONNE AU TOTAL :")
   print(paste(length(DEgenes), "genes with fdr < ", pval))
   
-  results <- getBM( filters = "ensembl_gene_id", attributes = c("ensembl_gene_id", "description", "external_gene_name"),
+  results <- getBM( filters = "ensembl_gene_id", attributes = c("ensembl_gene_id", "description", "external_gene_name", "entrezgene_id"),
              values = DEgenes, mart = mart)
+  results <- results[!rownames(results) %in% which(duplicated(results$ensembl_gene_id)), ]
+
   rownames(results) = results$ensembl_gene_id
   r = results[DEgenes,]
   r$pval = best$table$PValue
@@ -402,6 +406,31 @@ dualDE <- function(labels, pval=0.01){
   #kable(r, caption = "DEG et leur GO", format = "html")
   return(r)
 }
+
+
+OntologyProfile <- function(r){
+  ego <- enrichGO(gene = r$entrezgene_id,
+                OrgDb = org.At.tair.db,
+                ont = "BP",
+                pAdjustMethod = "BH",
+                pvalueCutoff  = 0.01,
+                qvalueCutoff  = 0.05,
+                readable = TRUE)
+  simpOnt <- simplify(ego, cutoff=0.7, by="p.adjust", select_fun=min)
+  simpOnt@result$Description
+  
+  print(barplot(simpOnt, showCategory = 40, font.size = 5))
+  print(dotplot(simpOnt, showCategory = 40, font.size = 5))
+  print(emapplot(simpOnt, layout = "kk"))
+}
+```
+
+
+# Effet Nitrate 
+
+## Conditions normales
+
+```{r nitrate}
 
 library(data.table)
 
@@ -412,17 +441,37 @@ kable(r)
 
 kable(r[r$description %like% "nitra", ])
 kable(r[r$external_gene_name %like% "NRT", ])
+kable(r[r$external_gene_name %like% "NR", ])
 
 #NRT2.1
 getExpression("AT1G08090")
 getExpression("AT1G08090", conds = c("cnF", "cNF"))
+
+#NAR2
+getExpression("AT5G50200")
+getExpression("AT5G50200", conds = c("cnF", "cNF"))
+
+"AT5G50200" %in% r$ensembl_gene_id
+
+OntologyProfile(r)
 ```
+NRT2.1 ne semble pas être différentiellement exprimé, NAR2 oui par contre.
 
 On retrouve une majorité de gènes activés par le fort nitrate. Les résultats sont un peu similaires à ceux du jeu de données d'entrainement de Nature entre témoin au KCl et Traitement au NO3.
 
-## Ontologies
+## En fort CO2
 
+```{r nitra_co2}
+labels <- c("CnF", "CNF")
+r <- dualDE(labels, pval = 0.01)
+kable(r)
 
+kable(r[r$description %like% "nitra", ])
+getExpression("AT1G08090", conds = labels)
+getExpression("AT5G50200", conds =labels)
+
+OntologyProfile(r)
+```
 
 # Effet CO2
 
@@ -434,37 +483,50 @@ r <- dualDE(labels, pval = 0.01)
 kable(r)
 
 kable(r[r$description %like% "oxid", ])
+
+OntologyProfile(r)
 ```
 
 ## En carence de nitrate
 ```{r co2Nitra}
 labels <- c("cnF", "CnF")
-dualDE(labels, pval = 0.01)
+r <- dualDE(labels, pval = 0.01)
+OntologyProfile(r)
 ```
 
 ## En carence en fer
 
 ```{r co2Fe}
 labels <- c("cNf", "CNf")
-dualDE(labels, pval = 0.01)
+r <- dualDE(labels, pval = 0.01)
+OntologyProfile(r)
 ```
 
 ## En carence des deux
 
 ```{r co2FeNitra}
 labels <- c("cnf", "Cnf")
-dualDE(labels, pval = 0.01)
+r <- dualDE(labels, pval = 0.01)
+OntologyProfile(r)
+
 ```
 
-# Effet Fer en condtions normales
+# Effet Fer 
+
+## En condtions normales
 
 ```{r Fe}
 labels <- c("cNf", "cNF")
-dualDE(labels, pval = 0.01)
+r <- dualDE(labels, pval = 0.01)
+OntologyProfile(r)
 ```
 
 
-# Enrichement on ontologies des clusters
+## En fort CO2
 
+```{r FeCO2}
+labels <- c("cNf", "CNf")
+r <- dualDE(labels, pval = 0.01)
+OntologyProfile(r)
 
-A faire maybe soon
+```
