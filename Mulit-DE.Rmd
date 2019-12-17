@@ -403,7 +403,6 @@ dualDE <- function(labels, pval=0.01){
   r = results[DEgenes,]
   r$pval = best$table$PValue
   r = r[order(r$pval),]
-  #kable(r, caption = "DEG et leur GO", format = "html")
   return(r)
 }
 
@@ -423,6 +422,56 @@ OntologyProfile <- function(r){
   print(dotplot(simpOnt, showCategory = 40, font.size = 5))
   print(emapplot(simpOnt, layout = "kk"))
 }
+
+
+
+mat <- matrix(nrow = length(unique(conds)), ncol = length(unique(conds)))
+
+comparables = c()
+for(c1 in unique(conds)){
+  for(c2 in unique(conds)){
+    nb_diffs=0
+    for(i in seq(1,3)){
+      if(str_split(c1, "")[[1]][i] != str_split(c2, "")[[1]][i]){
+        nb_diffs= nb_diffs+1
+      }
+    }
+    if(nb_diffs==1){
+      comparables = c(comparables, paste0(c1, "-", c2))
+    }
+  }
+}
+
+getGEgenesNumber <- function(labelsConc, pval = 0.01){
+  #data
+  labels = c(str_split_fixed(labelsConc, '-',2)[,1], str_split_fixed(labelsConc, '-',2)[,2])
+  print( labels)
+  d <- data[,grepl(labels[1], colnames(data)) | grepl(labels[2], colnames(data))]
+  y <- DGEList(counts=d, group =str_split_fixed(colnames(d), "_", 2)[,1])
+  y$samples
+  
+  #filtre
+  keep <- filterByExpr(y)
+  y <- y[keep, , keep.lib.sizes=FALSE]
+  
+  #normalisation
+  y <- calcNormFactors(y)
+  y$samples
+  
+  # estimation of dispersion and tests
+  y <- edgeR::estimateDisp(y)
+  et <- exactTest(y)
+  best = topTags(et, n = 10000)
+  best = best[best$table$FDR < pval,]
+  #best = best[abs(best$table$logFC) > 1,]
+  
+  #genes <- rownames(cpm(y, normalized.lib.sizes=TRUE))
+  DEgenes = rownames(best$table)
+  return(length(DEgenes))
+}
+
+
+
 ```
 
 
@@ -437,7 +486,7 @@ library(data.table)
 
 labels <- c("cnF", "cNF")
 r <- dualDE(labels, pval = 0.01)
-kable(r)
+#kable(r)
 
 kable(r[r$description %like% "nitra", ])
 kable(r[r$external_gene_name %like% "NRT", ])
@@ -464,7 +513,7 @@ On retrouve une majorité de gènes activés par le fort nitrate. Les résultats
 ```{r nitra_co2}
 labels <- c("CnF", "CNF")
 r <- dualDE(labels, pval = 0.01)
-kable(r)
+#kable(r)
 
 kable(r[r$description %like% "nitra", ])
 getExpression("AT1G08090", conds = labels)
@@ -530,3 +579,58 @@ r <- dualDE(labels, pval = 0.01)
 OntologyProfile(r)
 
 ```
+
+# En résumé : meeting Antoine Sophie
+
+## Données
+
+- Combinatoire 2*2*2 : Fer Nitrate CO2 pour Tomate et Arabidopsis : 48 transcritpômes
+
+
+- Données brutes traitées ave un pipeline fastp + STAR (stringenace 2 mismatch) + htseq-count pour obtenir des matrices de comptage (scripts python et bash sur cluster)
+
+
+- Qualité très statisfaisante, seul 3 échantillons de la condition CNF, ont une couverture un peu infériere aux autres, mais toujours très correcte
+
+
+## Analyses
+
+- Analyse d'homogénéité entre les réplicats biologiques de chacune des 8 conditions (html avec correlation histograms), on conclu a des bons réplicats biologiques
+
+- Analyse DE globale edgeR entre toutes les conditions puis **clustering** Coseq et **ACP** : très fort effet du Fer (second axe principal), effet tangible du nitrate (Troisième axe principal), CO2 peu décernable (on ne voit rien sur le quatrième axe principal)
+
+
+- On a 3*4 comparaisons de possibles entre nos transcriptômes. Pour chaque facteur, on le compare dans les 4 combinaisons possibles des 2 autres facteurs.
+
+```{r comp}
+nbDe <- sapply(comparables, getGEgenesNumber)
+df <- data.frame("Comparisons" = comparables, "DEGNumber"=nbDe)
+df <- df[rownames(df)[which(!duplicated(df$DEGNumber))],]
+kable(df[order(-df$DEGNumber),])
+
+
+library(reshape2)
+
+p <- ggplot(data = df, aes(x=Comparisons, y=DEGNumber, fill=Comparisons)) + geom_dotplot(binaxis = "y", stackdir = "center") +
+  theme(axis.text.x = element_text(angle = 320,
+                                 hjust = 0, colour = "grey50"), plot.title = element_text( size = 14, face = "bold")) +
+  ggtitle(paste("Number of DE genes for every condition comparisons"))
+p
+```
+## Interprêtations
+
+Le fer semble le facteur le plus impactant, suivi du nitrate.
+Les début d'analyses d'ontologies sont plutôt concluants.
+
+Le fait que l'effet CO2 en conditions normale soit si faible est marquant, et il semble accentué en condition de stress nutritionnel.
+Comme cet échantillon a été traité comme les autres tout au cours du pipeline, on ne voit pas d'autre explication à ce stade.
+
+Il reste à comparer les gènes trouvés en conditions normales et altérées des autres facteurs, pour voir si on retrouve bien les mêmes.
+
+Voir si des gènes bien connus pour répondre à un facteur sont retrouvés dans la liste d'expression différentielle.
+
+Refaire pareil avec la tomate, et trouver des gènes orthologues.
+
+
+Reste à faire une meilleure analyse globale en fixant bien les contrastes et design de l'estimation de dispersion et tests.
+
