@@ -29,3 +29,7 @@ ROC
 TCC
 biomartr
 biomaRt
+AnnotationDbi
+org.At.tair.db
+clusterProfiler
+enrichplot

@@ -1,0 +1,221 @@
+---
+title: "ACP clustering RNASeq mutli-facteurs : Fer, Azote et CO2"
+author: "Océane Cassan"
+date: "10/25/2019"
+output: 
+  rmdformats::material:
+    fig_width: 12
+    highlight: kate
+    includes:
+        after_body: footer.html
+---
+
+On cherche à étudier l'effet de trois facteurs sur le transcriptome des racines d'Arabidopsis.
+On cherche ici à utiliser et comparer différents packages de multiDE sur nos données.
+
+
+```{r knitr_init, echo=FALSE, cache=FALSE}
+library(knitr, warn.conflicts = F, quietly = T)
+library(rmdformats, warn.conflicts = F, quietly = T)
+
+## Global options
+options(max.print="75")
+opts_chunk$set(cache=FALSE,
+               prompt=FALSE,
+               tidy=TRUE,
+               comment=NA,
+               message=FALSE,
+               warning=FALSE,
+               fig.align = "center")
+opts_knit$set(width=75)
+setwd("~/Documents/CombinatoireFeNCO2/Combinatoire/")
+suppressMessages(library(ggplot2))
+library(gridExtra)
+suppressMessages(library(coseq))
+suppressMessages(library(stringr, warn.conflicts = F, quietly = T))
+suppressMessages(library(ggpubr, warn.conflicts = F, quietly = T))
+suppressMessages(library(ggplot2, warn.conflicts = F, quietly = T))
+suppressMessages(library(knitr, warn.conflicts = F, quietly = T))
+suppressMessages(library(TCC, warn.conflicts = F, quietly = T))
+suppressMessages(library(biomartr))
+suppressMessages(library(biomaRt))
+suppressMessages(library(ggplot2))
+suppressMessages(library(org.At.tair.db, warn.conflicts = F, quietly = T))
+suppressMessages(library(clusterProfiler, warn.conflicts = F, quietly = T))
+suppressMessages(library(enrichplot, warn.conflicts = F, quietly = T))
+
+mart = useMart(biomart="plants_mart",host="plants.ensembl.org", dataset = "athaliana_eg_gene")
+```
+
+
+# Import des données
+
+```{r data}
+data <- read.csv("quantifFiles/quantifGenes.csv", h = T, sep = ',')
+rownames(data) <- data$Gene
+genes = which(!(grepl("__", rownames(data))))
+not_quant = data[which((grepl("__", rownames(data)))),]
+data = data[genes,grepl('R', colnames(data))]
+head(data)
+dim(data)
+
+annot <- read.csv("Code_for_RNAseq_CO2_N_Fr.csv", h = T, sep = ';')
+conditions <- as.vector(unique(annot$Sample))
+annot$ID <- paste0('R', annot$Code)
+
+annot$condition <- substr(conditions, 1, nchar(conditions)-1)
+cond <- unique(substr(conditions, 1, nchar(conditions)-1))
+cond <- cond[grepl("At", cond)]
+
+getCondition <- function(id){
+  return(annot[annot$ID == id, "condition"])
+}
+
+getExactCondition <- function(id){
+  return(annot[annot$ID == id, "Sample"])
+}
+
+getLabel <- function(id){
+  text <- as.vector(annot[annot$ID == id, "Sample"])
+  res <- ''
+  nb <- substr(text, nchar(text), nchar(text))
+  if(grepl("Ambient", text)){res = paste0(res, "c")}
+  else{res = paste0(res, "C")}
+  if(grepl("High", text)){res = paste0(res, "N")}
+  else{res = paste0(res, "n")}
+  if(grepl("Starv", text)){res = paste0(res, "f")}
+  else{res = paste0(res, "F")}
+  res = paste0(res, "_", nb)
+  return(res)
+}
+
+getLabel("R6")
+getExactCondition("R4")
+getCondition("R4")
+
+```
+
+# Analyse globale avec edgeR
+
+TCC fait le test globalement, avec un layout "one way", qui prend les 8 conditions comme toutes différentes.
+En spécifiant un design de combinatoire $2*2*2$, on peut avoir des coefficients testés contre 0 pour chacune des variables et leur interactions.
+
+glmLRT conducts likelihood ratio tests for one or more coefficients in the linear model. If coef is used, the null hypothesis is that all the coefficients indicated by coef are equal to zero. If contrast is non-null, then the null hypothesis is that the specified contrasts of the coefficients are equal to zero. For example, a contrast of c(0,1,-1), assuming there are three coefficients, would test the hypothesis that the second and third coefficients are equal.
+
+
+While the likelihood ratio test is a more obvious choice for inferences with GLMs, the QLF-test is preferred as it reflects the uncertainty in estimating the dispersion for each gene. Itprovides more robust and reliable error rate control when the number of replicates is small.The QL dispersion estimation and hypothesis testing can be done by using the functionsglmQLFit()andglmQLFTest()
+
+```{r edgeR,cache=F}
+#data
+d <- data
+
+# fixation correcte des contrastes et formule
+colnames(d) <- sapply(colnames(d), getLabel)
+groups <- str_split_fixed(colnames(d), "_", 2)[,1]
+#colnames(d) <- sapply(colnames(d), getLabel)
+
+y <- DGEList(counts=d, group =groups)
+y$samples
+
+#filtre
+keep <- filterByExpr(y)
+y <- y[keep, keep.lib.sizes=FALSE]
+
+#normalisation
+y <- calcNormFactors(y)
+#norm <- cpm(y, normalized.lib.sizes=TRUE)
+#not_norm <- cpm(y, normalized.lib.sizes=FALSE)
+# rd_genes = sample(rownames(norm), 500)
+# heatmap(not_norm[rd_genes,], main = "Sans normalisation")
+# heatmap(norm[rd_genes,], main = "Avec normalisation")
+
+
+# Definition du design et des bonnes conditions de référence
+
+
+# design <- model.matrix(~0 + groups)
+# con <- makeContrasts((groupscnF - groupscnf), levels=design)
+# fit <- glmQLFit(y, contrast = con)
+# qlf.2vs1 <- glmQLFTest(fit)
+# a = topTags(qlf.2vs1, n= 1000)
+# a$table
+
+# estimation of dispersion and tests
+y <- edgeR::estimateDisp(y)
+
+  
+pval = 0.01
+et <- exactTest(y)
+best = topTags(et, n = 20000)
+best = best[best$table$FDR < pval,]
+best = best[abs(best$table$logFC) > 1,]
+
+#genes <- rownames(cpm(y, normalized.lib.sizes=TRUE))
+DEgenes = rownames(best$table)
+plotBCV(y)
+
+plotMD(et, cex = 0.5)
+abline(h=c(-1, 1), col="blue")
+abline(h=c(0), col="red")
+DEgenes = rownames(best$table)
+#plots
+plotMDS(y, top = 1000)
+```
+
+# Clustering sur les gènes DE
+
+On utilise des modèles de mélange pour regrouper les gènes ayant des profils d'expression similaires dans les différentes conditions.
+
+```{r coseq,cache=F}
+dataC <- data[DEgenes,]
+colnames(dataC) <- sapply(colnames(dataC), getLabel)
+
+
+rowSums(dataC)
+conds <- str_split_fixed(colnames(dataC), '_', 2)[,1]
+run_pois <- coseq(dataC, conds=conds, K=8:12, model="Poisson",iter = 5, transformation = "none")
+coseq::plot(run_pois)
+summary(run_pois)
+clusters_per_genes <- clusters(run_pois)
+```
+
+# ACP
+
+On représente le clustering dans la plan principal d'une ACP
+
+```{r adeACP}
+suppressMessages(library(ade4, warn.conflicts = F, quietly = T))
+suppressMessages(library(adegraphics, warn.conflicts = F, quietly = T))
+
+
+# fixation correcte des contrastes et formule
+
+
+acp <- dudi.pca(log(dataC+0.1), center = TRUE, scale = TRUE, scannf = FALSE, nf = 4)
+summary(acp)
+library("RColorBrewer")
+
+dataC$cluster = clusters_per_genes[as.vector(rownames(dataC))]
+s.corcircle(acp$co, xax=1, yax=2, fullcircle = FALSE, pback.col = "lightgrey")
+
+adegraphics::s.class(acp$li, xax =  1, yax = 2, as.factor(dataC$cluster), labels = as.character(levels(as.factor(dataC$cluster))), col = brewer.pal(n = 10, name = "Paired"), chullSize = 1, ellipseSize = 0, plabels.cex = 0.7, pbackground.col = "grey85", main = "Clusters dans le plan principal", ylim = c(-9, 9))
+
+
+
+s.corcircle(acp$co, xax=2, yax=3, fullcircle = FALSE, pback.col = "lightgrey")
+
+adegraphics::s.class(acp$li, xax =  2, yax = 3, as.factor(dataC$cluster), labels = as.character(levels(as.factor(dataC$cluster))), col = brewer.pal(n = 10, name = "Paired"), chullSize = 1, ellipseSize = 0, plabels.cex = 0.7, pbackground.col = "grey85", main = "Clusters dans le plan principal", ylim = c(-9, 9))
+
+s.corcircle(acp$co, xax=4, yax=2, fullcircle = FALSE, pback.col = "lightgrey")
+
+adegraphics::s.class(acp$li, xax =  4, yax = 2, as.factor(dataC$cluster), labels = as.character(levels(as.factor(dataC$cluster))), col = brewer.pal(n = 10, name = "Paired"), chullSize = 1, ellipseSize = 0, plabels.cex = 0.7, pbackground.col = "grey85", main = "Clusters dans le plan principal", ylim = c(-9, 9))
+
+s.corcircle(acp$co, xax=4, yax=3, fullcircle = FALSE, pback.col = "lightgrey")
+
+adegraphics::s.class(acp$li, xax =  4, yax = 3, as.factor(dataC$cluster), labels = as.character(levels(as.factor(dataC$cluster))), col = brewer.pal(n = 10, name = "Paired"), chullSize = 1, ellipseSize = 0, plabels.cex = 0.7, pbackground.col = "grey85", main = "Clusters dans le plan principal", ylim = c(-9, 9))
+```
+Il semblerait que l'ACP détecte dans un premier temps (avec le premier vecteur principal) la valeur moyenne d'expression, puis l'expression diff induite par le fer.
+
+On peut faire des représentations dans le plan des seconds et troisième axes principaux (le premier traduit le fer, le second la carence en nitrate).
+
+Sur le cercle de corrélations dans le plan 2 et 3, on voit bien que lorsque la carence fer est là, on peut différencier un effet nitrate. Le CO2 est, lui encore difficile à identifier, le 4eme axe de l'ACP ne renseignant pas beaucoup...
