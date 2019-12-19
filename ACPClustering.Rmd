@@ -51,7 +51,7 @@ mart = useMart(biomart="plants_mart",host="plants.ensembl.org", dataset = "athal
 # Import des données
 
 ```{r data}
-data <- read.csv("quantifFiles/quantifGenes.csv", h = T, sep = ',')
+data <- read.csv("quantifFiles/quantifGenesTomate.csv", h = T, sep = ',')
 rownames(data) <- data$Gene
 genes = which(!(grepl("__", rownames(data))))
 not_quant = data[which((grepl("__", rownames(data)))),]
@@ -65,7 +65,7 @@ annot$ID <- paste0('R', annot$Code)
 
 annot$condition <- substr(conditions, 1, nchar(conditions)-1)
 cond <- unique(substr(conditions, 1, nchar(conditions)-1))
-cond <- cond[grepl("At", cond)]
+cond <- cond[grepl("Sl", cond)]
 
 getCondition <- function(id){
   return(annot[annot$ID == id, "condition"])
@@ -89,8 +89,8 @@ getLabel <- function(id){
   return(res)
 }
 
-getLabel("R6")
-getExactCondition("R4")
+getLabel("R36")
+getExactCondition("R40")
 getCondition("R4")
 
 ```

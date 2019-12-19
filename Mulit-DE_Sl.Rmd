@@ -1,0 +1,731 @@
+---
+title: "Analyse d'expression différentielle mutli-facteurs : Fer, Azote et CO2 Tomate version!!"
+author: "Océane Cassan"
+date: "10/25/2019"
+output: 
+  rmdformats::material:
+    fig_width: 12
+    highlight: kate
+    includes:
+        after_body: footer.html
+---
+
+On cherche à étudier l'effet de trois facteurs sur le transcriptome des racines d'Arabidopsis.
+On cherche ici à utiliser et comparer différents packages de multiDE sur nos données.
+
+
+```{r knitr_init, echo=FALSE, cache=FALSE}
+library(knitr, warn.conflicts = F, quietly = T)
+library(rmdformats, warn.conflicts = F, quietly = T)
+
+## Global options
+options(max.print="75")
+opts_chunk$set(cache=FALSE,
+               prompt=FALSE,
+               tidy=TRUE,
+               comment=NA,
+               message=FALSE,
+               warning=FALSE,
+               fig.align = "center")
+opts_knit$set(width=75)
+setwd("~/Documents/CombinatoireFeNCO2/Combinatoire/")
+suppressMessages(library(ggplot2))
+library(gridExtra)
+suppressMessages(library(coseq))
+suppressMessages(library(stringr, warn.conflicts = F, quietly = T))
+suppressMessages(library(ggpubr, warn.conflicts = F, quietly = T))
+suppressMessages(library(ggplot2, warn.conflicts = F, quietly = T))
+suppressMessages(library(knitr, warn.conflicts = F, quietly = T))
+suppressMessages(library(TCC, warn.conflicts = F, quietly = T))
+suppressMessages(library(biomartr))
+suppressMessages(library(biomaRt))
+suppressMessages(library(ggplot2))
+suppressMessages(library(org.At.tair.db, warn.conflicts = F, quietly = T))
+suppressMessages(library(clusterProfiler, warn.conflicts = F, quietly = T))
+suppressMessages(library(enrichplot, warn.conflicts = F, quietly = T))
+suppressMessages(library(DESeq2, warn.conflicts = F, quietly = T))
+
+mart = useMart(biomart="plants_mart",host="plants.ensembl.org", dataset = "athaliana_eg_gene")
+```
+
+
+# Import des données
+
+```{r data}
+data <- read.csv("quantifFiles/quantifGenesTomate.csv", h = T, sep = ',')
+rownames(data) <- data$Gene
+genes = which(!(grepl("__", rownames(data))))
+not_quant = data[which((grepl("__", rownames(data)))),]
+data = data[genes,grepl('R', colnames(data))]
+head(data)
+dim(data)
+
+annot <- read.csv("Code_for_RNAseq_CO2_N_Fr.csv", h = T, sep = ';')
+conditions <- as.vector(unique(annot$Sample))
+annot$ID <- paste0('R', annot$Code)
+
+annot$condition <- substr(conditions, 1, nchar(conditions)-1)
+cond <- unique(substr(conditions, 1, nchar(conditions)-1))
+cond <- cond[grepl("Sl", cond)]
+
+getCondition <- function(id){
+  return(annot[annot$ID == id, "condition"])
+}
+
+getExactCondition <- function(id){
+  return(annot[annot$ID == id, "Sample"])
+}
+
+getLabel <- function(id){
+  text <- as.vector(annot[annot$ID == id, "Sample"])
+  res <- ''
+  nb <- substr(text, nchar(text), nchar(text))
+  if(grepl("Ambient", text)){res = paste0(res, "c")}
+  else{res = paste0(res, "C")}
+  if(grepl("High", text)){res = paste0(res, "N")}
+  else{res = paste0(res, "n")}
+  if(grepl("Starv", text)){res = paste0(res, "f")}
+  else{res = paste0(res, "F")}
+  res = paste0(res, "_", nb)
+  return(res)
+}
+
+getLabel("R26")
+getExactCondition("R40")
+getCondition("R41")
+
+```
+
+# TCC (Tag Count Comparison)
+
+TCC is an R package that provides a series of functions for differential expression analysis of tag count data. The package incorporates multi-step normalization methods, whose strategy is to remove potential DEGs before performing the data normalization. The normalization function based on this DEG elimination strategy (DEGES) includes (i) the original TbT method based on DEGES for two-group data with or without replicates, (ii) much faster methods for two-group data with or without replicates, and (iii) methods for multi-group comparison. TCC provides a simple unified interface to perform such analyses with combinations of functions provided by edgeR, DESeq, and baySeq.
+
+On crée l'objet TCC avec le design souhaité, et on filtre les gènes avec de faibles expressions (paramètre low.count).
+
+Lors de la normalisation (DEGES,iedgeR), on fait un premier calcul des gènes DE, pour pouvoir les enlever lors de la normalisation. Le maramètre test.method permet de choisir la manière de détecter les genes DE (edgeR, DEsqe2, ou tBt (très long)).
+On peut répéter cette procédure jusqu'à la convergence des facteurs de taille des librairies, d'ou le i.
+
+```{r tcc, cache=T}
+#design
+keep <- rowSums(data) >= 10
+data <- data[keep,]
+group <- sapply(colnames(data), getCondition)
+colnames(data) <- sapply(colnames(data), getLabel)
+tcc <- new("TCC", data, group)
+tcc
+tcc <- filterLowCountGenes(tcc, low.count = 10)
+
+#Normalisation
+tcc <- calcNormFactors(tcc, norm.method = "tmm", test.method = "edger",                      iteration = 1, FDR = 0.1, floorPDEG = 0.05)
+tcc$norm.factors
+tcc$DEGES$execution.time
+
+s <- sample(rownames(tcc$count), size = 200)
+heatmap(as.matrix(tcc$count[s,]), main = "Before normalisation")
+normalized.count <- getNormalizedData(tcc)
+heatmap(as.matrix(normalized.count[s,]), main = "After normalisation")
+# 
+# #DEtest
+# tcc <- estimateDE(tcc, test.method = "edger", FDR = 0.001)
+# result <- getResult(tcc, sort = TRUE)
+# DEgenes <- subset(result,estimatedDEG==1)
+# print(paste(dim(DEgenes)[1], " genes DE"))
+# top = DEgenes[1:5000,]
+# head(result)
+# plot(tcc, ylim = c(-11, 11), main = "Nitrate effect en conditions normales")
+# plot(tcc, group = c("At_AmbientCO2_HighNitrate_Fe","At_ElevatedCO2_HighNitrate_Fe"), main = "Effet CO2 en conditions normales", ylim = c(-11, 11))
+# 
+# plot(tcc, group = c("At_AmbientCO2_HighNitrate_FeStarvation","At_ElevatedCO2_HighNitrate_FeStarvation"), main = "Effet CO2 en Fe starvation", ylim = c(-11, 11))
+# 
+# plot(tcc, group = c("At_AmbientCO2_LowNitrate_Fe","At_ElevatedCO2_LowNitrate_Fe"), main = "Effet CO2 en low Nitrate", ylim = c(-11, 11))
+# 
+# plot(tcc, group = c("At_AmbientCO2_HighNitrate_Fe","At_AmbientCO2_HighNitrate_FeStarvation"), main = "Effet Fe en conditions normales", ylim = c(-11, 11))
+# 
+# plot(tcc, group = c("At_AmbientCO2_LowNitrate_FeStarvation","At_AmbientCO2_HighNitrate_FeStarvation"), main = "Effet Nitrate en Fe starvation", ylim = c(-11, 11))
+# 
+# mat <- as.matrix(normalized.count[top$gene_id,])
+# heatmap(mat)
+#           
+# # ggplot(melted_res, aes(Var2, Var1, fill= log(value))) + 
+# #   geom_tile() +
+# #   scale_fill_distiller(palette = "RdPu") +
+# #   theme(axis.text.x = element_text(size = 0.5, angle = 320,
+# #                                    hjust = 0, colour = "grey50"))
+# # library(viridis)
+# # heatmap <- ggplot(melted_res, aes(Var2, Var1, fill= log(value))) + geom_raster() + scale_fill_viridis(trans="sqrt") + theme(axis.text.x=element_text(angle=65, hjust=1), axis.text.y=element_blank(), axis.ticks.y=element_blank())
+# # heatmap
+```
+
+Fonction pour visualiser un gène étant donné son identifiant, en terme d'expression normalisée :
+
+
+```{r plot}
+getExpression <- function(gene, conds = "all"){
+  print(conds)
+  if (length(conds) ==1){
+    conds = colnames(normalized.count)
+  }
+  
+  else{conds = grepl(conds[1], colnames(normalized.count)) | grepl(conds[2], colnames(normalized.count))}
+  df <- normalized.count[gene, conds]
+  library(reshape2)
+  d<- melt(df)
+  d$group = str_split_fixed(rownames(d), "_", 2)[,1]
+  
+  p <- ggplot(data = d, aes(x=group, y=value, fill=group)) + geom_dotplot(binaxis = "y", stackdir = "center") +
+    theme(axis.text.x = element_text(angle = 320,
+                                   hjust = 0, colour = "grey50"), plot.title = element_text( size = 14, face = "bold")) +
+    ggtitle(paste("Normalized expression for ", gene))
+  p
+}
+
+rownames(normalized.count)
+getExpression("Sly00g0384671")
+getExpression("Sly00g0383611", conds = c("cNF", "CNF"))
+getExpression("Sly00g0384291")
+```
+
+
+Il semble que l'effet du fer soit le plus fort, et celui qui amplifie les autres effets.
+La technique utilisée ici identifie des DEG globalement, sans séparer lesquels sont dûs à quel effet.
+
+Comme les contrastes ne sont pas donnés, on considère toutes les conditions comme 8 conditions indpendantes.
+
+# Analyse globale avec edgeR
+
+TCC fait le test globalement, avec un layout "one way", qui prend les 8 conditions comme toutes différentes.
+En spécifiant un design de combinatoire $2*2*2$, on peut avoir des coefficients testés contre 0 pour chacune des variables et leur interactions.
+
+glmLRT conducts likelihood ratio tests for one or more coefficients in the linear model. If coef is used, the null hypothesis is that all the coefficients indicated by coef are equal to zero. If contrast is non-null, then the null hypothesis is that the specified contrasts of the coefficients are equal to zero. For example, a contrast of c(0,1,-1), assuming there are three coefficients, would test the hypothesis that the second and third coefficients are equal.
+
+
+While the likelihood ratio test is a more obvious choice for inferences with GLMs, the QLF-test is preferred as it reflects the uncertainty in estimating the dispersion for each gene. Itprovides more robust and reliable error rate control when the number of replicates is small.The QL dispersion estimation and hypothesis testing can be done by using the functionsglmQLFit()andglmQLFTest()
+
+```{r edgeR,cache=F}
+#data
+d <- data
+# fixation correcte des contrastes et formule
+
+#groups <- sapply(colnames(d), getLabel)
+groups <- str_split_fixed(colnames(d), "_", 2)[,1]
+#colnames(d) <- sapply(colnames(d), getLabel)
+
+y <- DGEList(counts=d, group =groups)
+y$samples
+
+#filtre
+keep <- filterByExpr(y)
+y <- y[keep, keep.lib.sizes=FALSE]
+
+#normalisation
+y <- calcNormFactors(y)
+#norm <- cpm(y, normalized.lib.sizes=TRUE)
+#not_norm <- cpm(y, normalized.lib.sizes=FALSE)
+# rd_genes = sample(rownames(norm), 500)
+# heatmap(not_norm[rd_genes,], main = "Sans normalisation")
+# heatmap(norm[rd_genes,], main = "Avec normalisation")
+
+
+# Definition du design et des bonnes conditions de référence
+
+co2 <- str_split_fixed(groups, "", 3)[,1]
+nitrate <- factor(str_split_fixed(groups, "", 3)[,2])
+nitrate <- relevel(nitrate, "N")
+
+fer <- factor(str_split_fixed(groups, "", 3)[,3])
+fer = relevel(fer, "F")
+
+data.frame(Sample=groups, co2,nitrate, fer)
+design <- model.matrix(~co2*nitrate*fer)
+rownames(design) <- colnames(y)
+
+kable(design)
+
+# design <- model.matrix(~0 + groups)
+# con <- makeContrasts((groupscnF - groupscnf), levels=design)
+# fit <- glmQLFit(y, contrast = con)
+# qlf.2vs1 <- glmQLFTest(fit)
+# a = topTags(qlf.2vs1, n= 1000)
+# a$table
+
+# estimation of dispersion and tests
+y <- edgeR::estimateDisp(y, design)
+y$common.dispersion
+plotBCV(y)
+
+
+fit <- glmFit(y, design)
+
+pval = 0.01
+
+#Genewise Negative Binomial Generalized Linear Models
+for(coef in colnames(design)){
+  print(coef)
+  
+  lrt <- glmLRT(fit, coef = coef)
+  print(summary(decideTests(lrt)), p.value = pval)
+  plotMD(lrt, cex=0.25)
+}
+
+# 
+# pval = 0.01
+# #et <- exactTest(y)
+# best = topTags(lrt, n = 10000)
+# best = best[best$table$FDR < pval,]
+# #best = best[abs(best$table$logFC) > 1,]
+# 
+# #genes <- rownames(cpm(y, normalized.lib.sizes=TRUE))
+# DEgenes = rownames(best$table)
+# plotBCV(y)
+# 
+# 
+# abline(h=c(-1, 1), col="blue")
+# abline(h=c(0), col="red")
+# print(summary(decideTests(lrt, p.value = 0.05)))
+# print(summary(decideTests(lrt, p.value = 0.01)))
+# 
+# #plots
+# plotMDS(y, top = 100)
+```
+
+# Fonctions d'analyse pairwise
+
+```{r funs}
+dualDE <- function(labels, pval=0.01, method = "DESeq"){
+  d <- data[,grepl(labels[1], colnames(data)) | grepl(labels[2], colnames(data))]
+  if(method == "edgeR"){
+    #data
+    
+    y <- DGEList(counts=d, group =str_split_fixed(colnames(d), "_", 2)[,1])
+    y$samples
+    
+    #filtre
+    keep <- filterByExpr(y)
+    y <- y[keep, , keep.lib.sizes=FALSE]
+    
+    #normalisation
+    y <- calcNormFactors(y)
+    y$samples
+    norm <- cpm(y, normalized.lib.sizes=TRUE)
+    not_norm <- cpm(y, normalized.lib.sizes=FALSE)
+    rd_genes = sample(rownames(norm), 500)
+    heatmap(not_norm[rd_genes,], main = "Sans normalisation")
+    heatmap(norm[rd_genes,], main = "Avec normalisation")
+    
+    # estimation of dispersion and tests
+    y <- edgeR::estimateDisp(y)
+    et <- exactTest(y)
+    best = topTags(et, n = 10000)
+    best = best[best$table$FDR < pval,]
+    #best = best[abs(best$table$logFC) > 1,]
+    
+    #genes <- rownames(cpm(y, normalized.lib.sizes=TRUE))
+    DEgenes = rownames(best$table)
+    plotBCV(y)
+    
+    plotMD(et, p.value = pval)
+    abline(h=c(-1, 1), col="blue")
+    abline(h=c(0), col="red")
+    print(summary(decideTests(et, p.value = pval)))
+    
+    #plots
+    plotMDS(y, top = 100, col=rep(1:2, each=3))
+    logcpm <- cpm(y, log=TRUE)
+    heatmap(logcpm[DEgenes,])
+    print("ON SELECTIONNE AU TOTAL :")
+    print(paste(length(DEgenes), "genes with fdr < ", pval))
+    
+    results <- getBM( filters = "ensembl_gene_id", attributes = c("ensembl_gene_id", "description", "external_gene_name", "entrezgene_id"),
+               values = DEgenes, mart = mart)
+    results <- results[!rownames(results) %in% which(duplicated(results$ensembl_gene_id)), ]
+  
+    rownames(results) = results$ensembl_gene_id
+    r = results[DEgenes,]
+    r$pval = best$table$PValue
+    r = r[order(r$pval),]
+    return(r)
+  }
+  if(method == 'DESeq'){
+    design = data.frame(
+     row.names = colnames( d ),
+     condition = str_split_fixed(colnames(d), "_", 2)[,1],
+     libType = rep("paired-end", length(colnames( d ))))
+
+    dds <- DESeq2::DESeqDataSetFromMatrix(countData = d,
+                                  colData = design,
+                                  design = ~ condition)
+    keep <- rowSums(counts(dds)) >= 10
+    dds <- dds[keep,]
+    #dds$condition <- relevel(dds$condition, ref = "untreated")
+    dds <- DESeq2::DESeq(dds)
+    res <- na.omit(results(dds))
+    resOrdered <- res[order(res$padj),]
+    sum(res$padj < pval, na.rm=TRUE)
+    DESeq2::plotMA(resOrdered)
+    DEgenes <- rownames(res[res$padj < pval,])
+    res <- res[res$padj < pval,]
+    
+    # results <- getBM( filters = "ensembl_gene_id", attributes = c("ensembl_gene_id", "description", "external_gene_name", "entrezgene_id"),
+    #            values = DEgenes, mart = mart)
+    # results <- results[!rownames(results) %in% which(duplicated(results$ensembl_gene_id)), ]
+    # 
+    # rownames(results) = results$ensembl_gene_id
+    # r <- results[DEgenes,]
+    # r$pval = res$padj
+    # r = r[order(r$pval),]
+    # 
+    # return(r)
+  }
+}
+
+
+OntologyProfile <- function(r){
+  ego <- enrichGO(gene = r$entrezgene_id,
+                OrgDb = org.At.tair.db,
+                ont = "BP",
+                pAdjustMethod = "BH",
+                pvalueCutoff  = 0.01,
+                qvalueCutoff  = 0.05,
+                readable = TRUE)
+  simpOnt <- simplify(ego, cutoff=0.7, by="p.adjust", select_fun=min)
+  simpOnt@result$Description
+  print(barplot(simpOnt, showCategory = 40, font.size = 5))
+  print(dotplot(simpOnt, showCategory = 40, font.size = 5))
+  print(emapplot(simpOnt, layout = "kk"))
+}
+
+
+
+mat <- matrix(nrow = length(unique(groups)), ncol = length(unique(groups)))
+
+comparables = c()
+for(c1 in unique(groups)){
+  for(c2 in unique(groups)){
+    nb_diffs=0
+    for(i in seq(1,3)){
+      if(str_split(c1, "")[[1]][i] != str_split(c2, "")[[1]][i]){
+        nb_diffs= nb_diffs+1
+      }
+    }
+    if(nb_diffs==1){
+      comparables = c(comparables, paste0(c1, "-", c2))
+    }
+  }
+}
+
+getDEgenes <- function(labelsConc, pval = 0.01, method = "DESeq"){
+  #data
+  labels = c(str_split_fixed(labelsConc, '-',2)[,1], str_split_fixed(labelsConc, '-',2)[,2])
+  print( labels)
+  d <- data[,grepl(labels[1], colnames(data)) | grepl(labels[2], colnames(data))]
+  
+  
+  if(method=="edgeR"){
+    y <- DGEList(counts=d, group =str_split_fixed(colnames(d), "_", 2)[,1])
+    y$samples
+    
+    #filtre
+    keep <- filterByExpr(y)
+    y <- y[keep, , keep.lib.sizes=FALSE]
+    
+    #normalisation
+    y <- calcNormFactors(y)
+    y$samples
+    
+    # estimation of dispersion and tests
+    y <- edgeR::estimateDisp(y)
+    et <- exactTest(y)
+    best = topTags(et, n = 20000)
+    best = best[best$table$FDR < pval,]
+    #best = best[abs(best$table$logFC) > 1,]
+    
+    DEgenes = rownames(best$table)
+    return(DEgenes)
+  }
+  if(method == 'DESeq'){
+    design = data.frame(
+     row.names = colnames( d ),
+     condition = str_split_fixed(colnames(d), "_", 2)[,1],
+     libType = rep("paired-end", length(colnames( d ))))
+
+    dds <- DESeq2::DESeqDataSetFromMatrix(countData = d,
+                                  colData = design,
+                                  design = ~ condition)
+    keep <- rowSums(counts(dds)) >= 10
+    dds <- dds[keep,]
+    #dds$condition <- relevel(dds$condition, ref = "untreated")
+    dds <- DESeq2::DESeq(dds)
+    res <- na.omit(results(dds))
+    resOrdered <- res[order(res$padj),]
+    sum(res$padj < pval, na.rm=TRUE)
+    DEgenes <- rownames(res[res$padj < pval,])
+    return(DEgenes)
+  }
+}
+
+
+
+
+# getDEgenes <- function(labelsConc, pval = 0.01){
+#   #data
+#   labels = c(str_split_fixed(labelsConc, '-',2)[,1], str_split_fixed(labelsConc, '-',2)[,2])
+#   print( labels)
+#   d <- data[,grepl(labels[1], colnames(data)) | grepl(labels[2], colnames(data))]
+#   y <- DGEList(counts=d, group =str_split_fixed(colnames(d), "_", 2)[,1])
+#   y$samples
+#   
+#   #filtre
+#   keep <- filterByExpr(y)
+#   y <- y[keep, , keep.lib.sizes=FALSE]
+#   
+#   #normalisation
+#   y <- calcNormFactors(y)
+#   y$samples
+#   
+#   # estimation of dispersion and tests
+#   y <- edgeR::estimateDisp(y)
+#   et <- exactTest(y)
+#   best = topTags(et, n = 20000)
+#   best = best[best$table$FDR < pval,]
+#   #best = best[abs(best$table$logFC) > 1,]
+#   
+#   #genes <- rownames(cpm(y, normalized.lib.sizes=TRUE))
+#   DEgenes = rownames(best$table)
+#   return(DEgenes)
+# }
+```
+
+
+# Effet Nitrate 
+
+## Conditions normales
+
+```{r nitrate}
+
+library(data.table)
+
+
+labels <- c("cnF", "cNF")
+r <- dualDE(labels, pval = 0.01)
+kable(r)
+
+kable(r[r$description %like% "nitra", ])
+kable(r[r$external_gene_name %like% "NRT", ])
+kable(r[r$external_gene_name %like% "NR", ])
+
+# #NRT2.1
+# getExpression("AT1G08090")
+# getExpression("AT1G08090", conds = c("cnF", "cNF"))
+# 
+# #NAR2
+# getExpression("AT5G50200")
+# getExpression("AT5G50200", conds = c("cnF", "cNF"))
+
+#OntologyProfile(r)
+```
+NRT2.1 ne semble pas être différentiellement exprimé, NAR2 oui par contre.
+
+On retrouve une majorité de gènes activés par le fort nitrate. Les résultats sont un peu similaires à ceux du jeu de données d'entrainement de Nature entre témoin au KCl et Traitement au NO3.
+
+## En fort CO2
+
+```{r nitra_co2}
+labels <- c("CnF", "CNF")
+r <- dualDE(labels, pval = 0.01)
+#kable(r)
+
+kable(r[r$description %like% "nitra", ])
+getExpression("AT1G08090", conds = labels)
+getExpression("AT5G50200", conds =labels)
+
+OntologyProfile(r)
+```
+
+# Effet CO2
+
+## En conditions normales
+
+```{r co2}
+labels <- c("cNF", "CNF")
+r <- dualDE(labels, pval = 0.01)
+#kable(r)
+
+#kable(r[r$description %like% "oxid", ])
+
+#OntologyProfile(r)
+
+
+labels <- c("cNF", "CNF")
+r <- dualDE(labels, pval = 0.01, method = "DESeq")
+#kable(r)
+
+kable(r[r$description %like% "oxid", ])
+
+#OntologyProfile(r)
+```
+
+## En carence de nitrate
+```{r co2Nitra}
+labels <- c("cnF", "CnF")
+r <- dualDE(labels, pval = 0.01)
+OntologyProfile(r)
+```
+
+## En carence en fer
+
+```{r co2Fe}
+labels <- c("cNf", "CNf")
+r <- dualDE(labels, pval = 0.01)
+OntologyProfile(r)
+```
+
+## En carence des deux
+
+```{r co2FeNitra}
+labels <- c("cnf", "Cnf")
+r <- dualDE(labels, pval = 0.01)
+OntologyProfile(r)
+
+```
+
+# Effet Fer 
+
+## En condtions normales
+
+```{r Fe}
+labels <- c("cNf", "cNF")
+r <- dualDE(labels, pval = 0.01)
+OntologyProfile(r)
+```
+
+
+## En fort CO2
+
+```{r FeCO2}
+labels <- c("cNf", "CNf")
+r <- dualDE(labels, pval = 0.01)
+OntologyProfile(r)
+```
+
+# En résumé : meeting Antoine Sophie
+
+## Données
+
+- Combinatoire 2*2*2 : Fer Nitrate CO2 pour Tomate et Arabidopsis : 48 transcritpômes
+
+
+- Données brutes traitées ave un pipeline fastp + STAR (stringenace 2 mismatch) + htseq-count pour obtenir des matrices de comptage (scripts python et bash sur cluster)
+
+
+- Qualité très statisfaisante, seul 3 échantillons de la condition CNF, ont une couverture un peu infériere aux autres, mais toujours très correcte
+
+
+## Analyses
+
+- Analyse d'homogénéité entre les réplicats biologiques de chacune des 8 conditions (html avec correlation histograms), on conclu a des bons réplicats biologiques
+
+- Analyse DE globale edgeR entre toutes les conditions, desig combinatoire encore à affiner et travailler puis **clustering** Coseq et **ACP** : très fort effet du Fer (second axe principal), effet tangible du nitrate (Troisième axe principal), CO2 peu décernable (on ne voit rien sur le quatrième axe principal)
+
+
+- On a 3*4 comparaisons de possibles entre nos transcriptômes. Pour chaque facteur, on le compare dans les 4 combinaisons possibles des 2 autres facteurs.
+
+```{r comp}
+DEgenes = list()
+nbDe = c()
+for(comp in comparables){
+  print(comp)
+  genes = getDEgenes(comp)
+  DEgenes[[length(DEgenes)+1]] = genes
+  nbDe = c(nbDe, length(genes))
+}
+
+save(file = "DEgenes.Rdata", DEgenes)
+save(file = "Comparisons.RData", comparables)
+#nbDe <- sapply(comparables, getGEgenesNumber)
+df <- data.frame("Comparisons" = comparables, "DEGNumber"=nbDe)
+df <- df[rownames(df)[which(!duplicated(df$DEGNumber))],]
+kable(df[order(-df$DEGNumber),])
+
+library(reshape2)
+
+p <- ggplot(data = df, aes(x=Comparisons, y=DEGNumber, fill=Comparisons)) + geom_dotplot(binaxis = "y", stackdir = "center") +
+  theme(axis.text.x = element_text(angle = 320,
+                                 hjust = 0, colour = "grey50"), plot.title = element_text( size = 14, face = "bold")) +
+  ggtitle(paste("Number of DE genes for every condition comparisons"))
+p
+```
+# Interprêtations
+
+Le fer semble le facteur le plus impactant, suivi du nitrate.
+Les début d'analyses d'ontologies sont plutôt concluants.
+
+Le fait que l'effet CO2 en conditions normale soit si faible est marquant, et il semble accentué en condition de stress nutritionnel.
+Comme cet échantillon a été traité comme les autres tout au cours du pipeline, on ne voit pas d'autre explication à ce stade.
+
+Il reste à comparer les gènes trouvés en conditions normales et altérées des autres facteurs, pour voir si on retrouve bien les mêmes.
+
+Voir si des gènes bien connus pour répondre à un facteur sont retrouvés dans la liste d'expression différentielle.
+
+Refaire pareil avec la tomate, et trouver des gènes orthologues.
+
+
+Reste à faire une meilleure analyse globale en fixant bien les contrastes et design de l'estimation de dispersion et tests.
+
+
+# Venn diagrams
+
+```{r venn}
+library(ggVennDiagram)
+library(VennDiagram)
+
+names(DEgenes) <- comparables
+
+getOneFactorComparisons <- function(factor = 'C'){
+  if(factor == 'C') pos = 1
+  else if(factor == 'n') pos = 2
+  else if(factor =='f') pos = 3
+  poss = seq(1:3)
+  others = poss[poss != pos]
+  res = c()
+  for(comp in comparables){
+    labels = str_split_fixed(comp, '-', 2)
+    diffFactor = substr(labels[1], pos, pos) != substr(labels[2], pos, pos)
+    other1 = substr(labels[1], others[1], others[1]) == substr(labels[2], others[1], others[1])
+    other2 = substr(labels[1], others[2], others[2]) == substr(labels[2], others[2], others[2])
+    if (diffFactor & other1 & other2 & grepl(factor, labels[1])){
+      res = c(res, comp)
+    }
+  }
+  return(res)
+}
+
+
+DEgenesCO2 = list()
+for(comp in getOneFactorComparisons()){
+  print(comp)
+  genes = getDEgenes(comp)
+  DEgenesCO2[[length(DEgenesCO2)+1]] = genes
+}
+names(DEgenesCO2) = getOneFactorComparisons()
+ggVennDiagram(DEgenesCO2, main = "Differentially expressed genes in reponse to CO2")
+
+DEgenesN = list()
+for(comp in getOneFactorComparisons('n')){
+  print(comp)
+  genes = getDEgenes(comp)
+  DEgenesN[[length(DEgenesN)+1]] = genes
+}
+names(DEgenesN) = getOneFactorComparisons('n')
+ggVennDiagram(DEgenesN, main = "Differentially expressed genes in reponse to Nitrate")
+
+
+DEgenesFe = list()
+for(comp in getOneFactorComparisons('f')){
+  print(comp)
+  genes = getDEgenes(comp)
+  DEgenesFe[[length(DEgenesFe)+1]] = genes
+}
+names(DEgenesFe) = getOneFactorComparisons('f')
+ggVennDiagram(DEgenesFe, main = "Differentially expressed genes in reponse to Iron")
+```
+

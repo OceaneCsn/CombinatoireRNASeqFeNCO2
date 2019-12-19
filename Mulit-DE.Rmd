@@ -43,6 +43,7 @@ suppressMessages(library(ggplot2))
 suppressMessages(library(org.At.tair.db, warn.conflicts = F, quietly = T))
 suppressMessages(library(clusterProfiler, warn.conflicts = F, quietly = T))
 suppressMessages(library(enrichplot, warn.conflicts = F, quietly = T))
+suppressMessages(library(DESeq2, warn.conflicts = F, quietly = T))
 
 mart = useMart(biomart="plants_mart",host="plants.ensembl.org", dataset = "athaliana_eg_gene")
 ```
@@ -288,57 +289,91 @@ for(coef in colnames(design)){
 # Fonctions d'analyse pairwise
 
 ```{r funs}
-dualDE <- function(labels, pval=0.01){
-  #data
+dualDE <- function(labels, pval=0.01, method = "edgeR"){
   d <- data[,grepl(labels[1], colnames(data)) | grepl(labels[2], colnames(data))]
-  y <- DGEList(counts=d, group =str_split_fixed(colnames(d), "_", 2)[,1])
-  y$samples
+  if(method == "edgeR"){
+    #data
+    
+    y <- DGEList(counts=d, group =str_split_fixed(colnames(d), "_", 2)[,1])
+    y$samples
+    
+    #filtre
+    keep <- filterByExpr(y)
+    y <- y[keep, , keep.lib.sizes=FALSE]
+    
+    #normalisation
+    y <- calcNormFactors(y)
+    y$samples
+    norm <- cpm(y, normalized.lib.sizes=TRUE)
+    not_norm <- cpm(y, normalized.lib.sizes=FALSE)
+    rd_genes = sample(rownames(norm), 500)
+    heatmap(not_norm[rd_genes,], main = "Sans normalisation")
+    heatmap(norm[rd_genes,], main = "Avec normalisation")
+    
+    # estimation of dispersion and tests
+    y <- edgeR::estimateDisp(y)
+    et <- exactTest(y)
+    best = topTags(et, n = 10000)
+    best = best[best$table$FDR < pval,]
+    #best = best[abs(best$table$logFC) > 1,]
+    
+    #genes <- rownames(cpm(y, normalized.lib.sizes=TRUE))
+    DEgenes = rownames(best$table)
+    plotBCV(y)
+    
+    plotMD(et, p.value = pval)
+    abline(h=c(-1, 1), col="blue")
+    abline(h=c(0), col="red")
+    print(summary(decideTests(et, p.value = pval)))
+    
+    #plots
+    plotMDS(y, top = 100, col=rep(1:2, each=3))
+    logcpm <- cpm(y, log=TRUE)
+    heatmap(logcpm[DEgenes,])
+    print("ON SELECTIONNE AU TOTAL :")
+    print(paste(length(DEgenes), "genes with fdr < ", pval))
+    
+    results <- getBM( filters = "ensembl_gene_id", attributes = c("ensembl_gene_id", "description", "external_gene_name", "entrezgene_id"),
+               values = DEgenes, mart = mart)
+    results <- results[!rownames(results) %in% which(duplicated(results$ensembl_gene_id)), ]
   
-  #filtre
-  keep <- filterByExpr(y)
-  y <- y[keep, , keep.lib.sizes=FALSE]
-  
-  #normalisation
-  y <- calcNormFactors(y)
-  y$samples
-  norm <- cpm(y, normalized.lib.sizes=TRUE)
-  not_norm <- cpm(y, normalized.lib.sizes=FALSE)
-  rd_genes = sample(rownames(norm), 500)
-  heatmap(not_norm[rd_genes,], main = "Sans normalisation")
-  heatmap(norm[rd_genes,], main = "Avec normalisation")
-  
-  # estimation of dispersion and tests
-  y <- edgeR::estimateDisp(y)
-  et <- exactTest(y)
-  best = topTags(et, n = 10000)
-  best = best[best$table$FDR < pval,]
-  #best = best[abs(best$table$logFC) > 1,]
-  
-  #genes <- rownames(cpm(y, normalized.lib.sizes=TRUE))
-  DEgenes = rownames(best$table)
-  plotBCV(y)
-  
-  plotMD(et, p.value = pval)
-  abline(h=c(-1, 1), col="blue")
-  abline(h=c(0), col="red")
-  print(summary(decideTests(et, p.value = pval)))
-  
-  #plots
-  plotMDS(y, top = 100, col=rep(1:2, each=3))
-  logcpm <- cpm(y, log=TRUE)
-  heatmap(logcpm[DEgenes,])
-  print("ON SELECTIONNE AU TOTAL :")
-  print(paste(length(DEgenes), "genes with fdr < ", pval))
-  
-  results <- getBM( filters = "ensembl_gene_id", attributes = c("ensembl_gene_id", "description", "external_gene_name", "entrezgene_id"),
-             values = DEgenes, mart = mart)
-  results <- results[!rownames(results) %in% which(duplicated(results$ensembl_gene_id)), ]
+    rownames(results) = results$ensembl_gene_id
+    r = results[DEgenes,]
+    r$pval = best$table$PValue
+    r = r[order(r$pval),]
+    return(r)
+  }
+  if(method == 'DESeq'){
+    design = data.frame(
+     row.names = colnames( d ),
+     condition = str_split_fixed(colnames(d), "_", 2)[,1],
+     libType = rep("paired-end", length(colnames( d ))))
 
-  rownames(results) = results$ensembl_gene_id
-  r = results[DEgenes,]
-  r$pval = best$table$PValue
-  r = r[order(r$pval),]
-  return(r)
+    dds <- DESeq2::DESeqDataSetFromMatrix(countData = d,
+                                  colData = design,
+                                  design = ~ condition)
+    keep <- rowSums(counts(dds)) >= 10
+    dds <- dds[keep,]
+    #dds$condition <- relevel(dds$condition, ref = "untreated")
+    dds <- DESeq2::DESeq(dds)
+    res <- na.omit(results(dds))
+    resOrdered <- res[order(res$padj),]
+    sum(res$padj < pval, na.rm=TRUE)
+    DESeq2::plotMA(resOrdered)
+    DEgenes <- rownames(res[res$padj < pval,])
+    res <- res[res$padj < pval,]
+    
+    results <- getBM( filters = "ensembl_gene_id", attributes = c("ensembl_gene_id", "description", "external_gene_name", "entrezgene_id"),
+               values = DEgenes, mart = mart)
+    results <- results[!rownames(results) %in% which(duplicated(results$ensembl_gene_id)), ]
+  
+    rownames(results) = results$ensembl_gene_id
+    r <- results[DEgenes,]
+    r$pval = res$padj
+    r = r[order(r$pval),]
+    
+    return(r)
+  }
 }
 
 
@@ -352,7 +387,6 @@ OntologyProfile <- function(r){
                 readable = TRUE)
   simpOnt <- simplify(ego, cutoff=0.7, by="p.adjust", select_fun=min)
   simpOnt@result$Description
-  
   print(barplot(simpOnt, showCategory = 40, font.size = 5))
   print(dotplot(simpOnt, showCategory = 40, font.size = 5))
   print(emapplot(simpOnt, layout = "kk"))
@@ -377,36 +411,86 @@ for(c1 in unique(groups)){
   }
 }
 
-getGEgenesNumber <- function(labelsConc, pval = 0.01){
+getDEgenes <- function(labelsConc, pval = 0.01, method = "edgeR"){
   #data
   labels = c(str_split_fixed(labelsConc, '-',2)[,1], str_split_fixed(labelsConc, '-',2)[,2])
   print( labels)
   d <- data[,grepl(labels[1], colnames(data)) | grepl(labels[2], colnames(data))]
-  y <- DGEList(counts=d, group =str_split_fixed(colnames(d), "_", 2)[,1])
-  y$samples
   
-  #filtre
-  keep <- filterByExpr(y)
-  y <- y[keep, , keep.lib.sizes=FALSE]
   
-  #normalisation
-  y <- calcNormFactors(y)
-  y$samples
-  
-  # estimation of dispersion and tests
-  y <- edgeR::estimateDisp(y)
-  et <- exactTest(y)
-  best = topTags(et, n = 20000)
-  best = best[best$table$FDR < pval,]
-  #best = best[abs(best$table$logFC) > 1,]
-  
-  #genes <- rownames(cpm(y, normalized.lib.sizes=TRUE))
-  DEgenes = rownames(best$table)
-  return(length(DEgenes))
+  if(method=="edgeR"){
+    y <- DGEList(counts=d, group =str_split_fixed(colnames(d), "_", 2)[,1])
+    y$samples
+    
+    #filtre
+    keep <- filterByExpr(y)
+    y <- y[keep, , keep.lib.sizes=FALSE]
+    
+    #normalisation
+    y <- calcNormFactors(y)
+    y$samples
+    
+    # estimation of dispersion and tests
+    y <- edgeR::estimateDisp(y)
+    et <- exactTest(y)
+    best = topTags(et, n = 20000)
+    best = best[best$table$FDR < pval,]
+    #best = best[abs(best$table$logFC) > 1,]
+    
+    DEgenes = rownames(best$table)
+    return(DEgenes)
+  }
+  if(method == 'DESeq'){
+    design = data.frame(
+     row.names = colnames( d ),
+     condition = str_split_fixed(colnames(d), "_", 2)[,1],
+     libType = rep("paired-end", length(colnames( d ))))
+
+    dds <- DESeq2::DESeqDataSetFromMatrix(countData = d,
+                                  colData = design,
+                                  design = ~ condition)
+    keep <- rowSums(counts(dds)) >= 10
+    dds <- dds[keep,]
+    #dds$condition <- relevel(dds$condition, ref = "untreated")
+    dds <- DESeq2::DESeq(dds)
+    res <- na.omit(results(dds))
+    resOrdered <- res[order(res$padj),]
+    sum(res$padj < pval, na.rm=TRUE)
+    DEgenes <- rownames(res[res$padj < pval,])
+    return(DEgenes)
+  }
 }
 
 
 
+
+# getDEgenes <- function(labelsConc, pval = 0.01){
+#   #data
+#   labels = c(str_split_fixed(labelsConc, '-',2)[,1], str_split_fixed(labelsConc, '-',2)[,2])
+#   print( labels)
+#   d <- data[,grepl(labels[1], colnames(data)) | grepl(labels[2], colnames(data))]
+#   y <- DGEList(counts=d, group =str_split_fixed(colnames(d), "_", 2)[,1])
+#   y$samples
+#   
+#   #filtre
+#   keep <- filterByExpr(y)
+#   y <- y[keep, , keep.lib.sizes=FALSE]
+#   
+#   #normalisation
+#   y <- calcNormFactors(y)
+#   y$samples
+#   
+#   # estimation of dispersion and tests
+#   y <- edgeR::estimateDisp(y)
+#   et <- exactTest(y)
+#   best = topTags(et, n = 20000)
+#   best = best[best$table$FDR < pval,]
+#   #best = best[abs(best$table$logFC) > 1,]
+#   
+#   #genes <- rownames(cpm(y, normalized.lib.sizes=TRUE))
+#   DEgenes = rownames(best$table)
+#   return(DEgenes)
+# }
 ```
 
 
@@ -469,6 +553,15 @@ kable(r)
 kable(r[r$description %like% "oxid", ])
 
 OntologyProfile(r)
+
+
+labels <- c("cNF", "CNF")
+r <- dualDE(labels, pval = 0.01, method = "DESeq")
+kable(r)
+
+kable(r[r$description %like% "oxid", ])
+
+OntologyProfile(r)
 ```
 
 ## En carence de nitrate
@@ -512,7 +605,6 @@ OntologyProfile(r)
 labels <- c("cNf", "CNf")
 r <- dualDE(labels, pval = 0.01)
 OntologyProfile(r)
-
 ```
 
 # En résumé : meeting Antoine Sophie
@@ -538,11 +630,21 @@ OntologyProfile(r)
 - On a 3*4 comparaisons de possibles entre nos transcriptômes. Pour chaque facteur, on le compare dans les 4 combinaisons possibles des 2 autres facteurs.
 
 ```{r comp}
-nbDe <- sapply(comparables, getGEgenesNumber)
+DEgenes = list()
+nbDe = c()
+for(comp in comparables){
+  print(comp)
+  genes = getDEgenes(comp)
+  DEgenes[[length(DEgenes)+1]] = genes
+  nbDe = c(nbDe, length(genes))
+}
+
+save(file = "DEgenes.Rdata", DEgenes)
+save(file = "Comparisons.RData", comparables)
+#nbDe <- sapply(comparables, getGEgenesNumber)
 df <- data.frame("Comparisons" = comparables, "DEGNumber"=nbDe)
 df <- df[rownames(df)[which(!duplicated(df$DEGNumber))],]
 kable(df[order(-df$DEGNumber),])
-
 
 library(reshape2)
 
@@ -552,7 +654,7 @@ p <- ggplot(data = df, aes(x=Comparisons, y=DEGNumber, fill=Comparisons)) + geom
   ggtitle(paste("Number of DE genes for every condition comparisons"))
 p
 ```
-## Interprêtations
+# Interprêtations
 
 Le fer semble le facteur le plus impactant, suivi du nitrate.
 Les début d'analyses d'ontologies sont plutôt concluants.
@@ -568,4 +670,62 @@ Refaire pareil avec la tomate, et trouver des gènes orthologues.
 
 
 Reste à faire une meilleure analyse globale en fixant bien les contrastes et design de l'estimation de dispersion et tests.
+
+
+# Venn diagrams
+
+```{r venn}
+library(ggVennDiagram)
+library(VennDiagram)
+
+names(DEgenes) <- comparables
+
+getOneFactorComparisons <- function(factor = 'C'){
+  if(factor == 'C') pos = 1
+  else if(factor == 'n') pos = 2
+  else if(factor =='f') pos = 3
+  poss = seq(1:3)
+  others = poss[poss != pos]
+  res = c()
+  for(comp in comparables){
+    labels = str_split_fixed(comp, '-', 2)
+    diffFactor = substr(labels[1], pos, pos) != substr(labels[2], pos, pos)
+    other1 = substr(labels[1], others[1], others[1]) == substr(labels[2], others[1], others[1])
+    other2 = substr(labels[1], others[2], others[2]) == substr(labels[2], others[2], others[2])
+    if (diffFactor & other1 & other2 & grepl(factor, labels[1])){
+      res = c(res, comp)
+    }
+  }
+  return(res)
+}
+
+
+DEgenesCO2 = list()
+for(comp in getOneFactorComparisons()){
+  print(comp)
+  genes = getDEgenes(comp)
+  DEgenesCO2[[length(DEgenesCO2)+1]] = genes
+}
+names(DEgenesCO2) = getOneFactorComparisons()
+ggVennDiagram(DEgenesCO2, main = "Differentially expressed genes in reponse to CO2")
+
+DEgenesN = list()
+for(comp in getOneFactorComparisons('n')){
+  print(comp)
+  genes = getDEgenes(comp)
+  DEgenesN[[length(DEgenesN)+1]] = genes
+}
+names(DEgenesN) = getOneFactorComparisons('n')
+ggVennDiagram(DEgenesN, main = "Differentially expressed genes in reponse to Nitrate")
+
+
+DEgenesFe = list()
+for(comp in getOneFactorComparisons('f')){
+  print(comp)
+  genes = getDEgenes(comp)
+  DEgenesFe[[length(DEgenesFe)+1]] = genes
+}
+names(DEgenesFe) = getOneFactorComparisons('f')
+ggVennDiagram(DEgenesFe, main = "Differentially expressed genes in reponse to Iron")
+```
 
