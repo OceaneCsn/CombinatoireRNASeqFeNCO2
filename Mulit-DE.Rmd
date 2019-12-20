@@ -1,5 +1,6 @@
 ---
 title: "Analyse d'expression différentielle mutli-facteurs : Fer, Azote et CO2"
+subtitle: "Etude globale"
 author: "Océane Cassan"
 date: "10/25/2019"
 output: 
