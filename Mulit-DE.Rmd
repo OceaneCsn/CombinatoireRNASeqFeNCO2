@@ -46,6 +46,7 @@ suppressMessages(library(clusterProfiler, warn.conflicts = F, quietly = T))
 suppressMessages(library(enrichplot, warn.conflicts = F, quietly = T))
 suppressMessages(library(DESeq2, warn.conflicts = F, quietly = T))
 
+
 mart = useMart(biomart="plants_mart",host="plants.ensembl.org", dataset = "athaliana_eg_gene")
 ```
 
@@ -53,6 +54,7 @@ mart = useMart(biomart="plants_mart",host="plants.ensembl.org", dataset = "athal
 # Import des données
 
 ```{r data}
+#quantification file
 data <- read.csv("quantifFiles/quantifGenes.csv", h = T, sep = ',')
 rownames(data) <- data$Gene
 genes = which(!(grepl("__", rownames(data))))
@@ -61,6 +63,7 @@ data = data[genes,grepl('R', colnames(data))]
 head(data)
 dim(data)
 
+# sample matching
 annot <- read.csv("Code_for_RNAseq_CO2_N_Fr.csv", h = T, sep = ';')
 conditions <- as.vector(unique(annot$Sample))
 annot$ID <- paste0('R', annot$Code)
@@ -70,14 +73,16 @@ cond <- unique(substr(conditions, 1, nchar(conditions)-1))
 cond <- cond[grepl("At", cond)]
 
 getCondition <- function(id){
+  # get condition without replicates
   return(annot[annot$ID == id, "condition"])
 }
-
 getExactCondition <- function(id){
+  # get condition with sample
   return(annot[annot$ID == id, "Sample"])
 }
 
-getLabel <- function(id){
+getLabel <- function(id, with.rep = T){
+  # get condition with sample in a simplified notation
   text <- as.vector(annot[annot$ID == id, "Sample"])
   res <- ''
   nb <- substr(text, nchar(text), nchar(text))
@@ -87,7 +92,7 @@ getLabel <- function(id){
   else{res = paste0(res, "n")}
   if(grepl("Starv", text)){res = paste0(res, "f")}
   else{res = paste0(res, "F")}
-  res = paste0(res, "_", nb)
+  if(with.rep) res = paste0(res, "_", nb)
   return(res)
 }
 
@@ -99,7 +104,7 @@ getCondition("R4")
 
 # TCC (Tag Count Comparison)
 
-TCC is an R package that provides a series of functions for differential expression analysis of tag count data. The package incorporates multi-step normalization methods, whose strategy is to remove potential DEGs before performing the data normalization. The normalization function based on this DEG elimination strategy (DEGES) includes (i) the original TbT method based on DEGES for two-group data with or without replicates, (ii) much faster methods for two-group data with or without replicates, and (iii) methods for multi-group comparison. TCC provides a simple unified interface to perform such analyses with combinations of functions provided by edgeR, DESeq, and baySeq.
+TCC is an R package that provides a series of functions for differential expression analysis of tag count data. The package incorporates **multi-step normalization methods**, whose strategy is to remove potential DEGs before performing the data normalization. The normalization function based on this DEG elimination strategy (DEGES) includes (i) the original TbT method based on DEGES for two-group data with or without replicates, (ii) much faster methods for two-group data with or without replicates, and (iii) methods for multi-group comparison. TCC provides a simple unified interface to perform such analyses with combinations of functions provided by edgeR, DESeq, and baySeq.
 
 On crée l'objet TCC avec le design souhaité, et on filtre les gènes avec de faibles expressions (paramètre low.count).
 
@@ -110,14 +115,12 @@ On peut répéter cette procédure jusqu'à la convergence des facteurs de taill
 #design
 keep <- rowSums(data) >= 10
 data <- data[keep,]
-group <- sapply(colnames(data), getCondition)
+group <- sapply(colnames(data), getLabel, with.rep = F)
 colnames(data) <- sapply(colnames(data), getLabel)
 tcc <- new("TCC", data, group)
-tcc
-tcc <- filterLowCountGenes(tcc, low.count = 10)
 
 #Normalisation
-tcc <- calcNormFactors(tcc, norm.method = "tmm", test.method = "edger",                      iteration = 1, FDR = 0.1, floorPDEG = 0.05)
+tcc <- calcNormFactors(tcc, norm.method = "tmm", test.method = "edger", iteration = 1, FDR = 0.01, floorPDEG = 0.05)
 tcc$norm.factors
 tcc$DEGES$execution.time
 
@@ -127,58 +130,30 @@ normalized.count <- getNormalizedData(tcc)
 heatmap(as.matrix(normalized.count[s,]), main = "After normalisation")
 
 #DEtest
-tcc <- estimateDE(tcc, test.method = "edger", FDR = 0.001)
+tcc <- estimateDE(tcc, test.method = "edger", FDR = 0.01, design = model.matrix(~group))
 result <- getResult(tcc, sort = TRUE)
 DEgenes <- subset(result,estimatedDEG==1)
 print(paste(dim(DEgenes)[1], " genes DE"))
 top = DEgenes[1:5000,]
 head(result)
 plot(tcc, ylim = c(-11, 11), main = "Nitrate effect en conditions normales")
-plot(tcc, group = c("At_AmbientCO2_HighNitrate_Fe","At_ElevatedCO2_HighNitrate_Fe"), main = "Effet CO2 en conditions normales", ylim = c(-11, 11))
+plot(tcc, group = c("group","At_ElevatedCO2_HighNitrate_Fe"), main = "Effet CO2 en conditions normales", ylim = c(-11, 11))
 
 plot(tcc, group = c("At_AmbientCO2_HighNitrate_FeStarvation","At_ElevatedCO2_HighNitrate_FeStarvation"), main = "Effet CO2 en Fe starvation", ylim = c(-11, 11))
 
 plot(tcc, group = c("At_AmbientCO2_LowNitrate_Fe","At_ElevatedCO2_LowNitrate_Fe"), main = "Effet CO2 en low Nitrate", ylim = c(-11, 11))
-
 plot(tcc, group = c("At_AmbientCO2_HighNitrate_Fe","At_AmbientCO2_HighNitrate_FeStarvation"), main = "Effet Fe en conditions normales", ylim = c(-11, 11))
-
 plot(tcc, group = c("At_AmbientCO2_LowNitrate_FeStarvation","At_AmbientCO2_HighNitrate_FeStarvation"), main = "Effet Nitrate en Fe starvation", ylim = c(-11, 11))
 
 mat <- as.matrix(normalized.count[top$gene_id,])
 heatmap(mat)
-          
-# ggplot(melted_res, aes(Var2, Var1, fill= log(value))) + 
-#   geom_tile() +
-#   scale_fill_distiller(palette = "RdPu") +
-#   theme(axis.text.x = element_text(size = 0.5, angle = 320,
-#                                    hjust = 0, colour = "grey50"))
-# library(viridis)
-# heatmap <- ggplot(melted_res, aes(Var2, Var1, fill= log(value))) + geom_raster() + scale_fill_viridis(trans="sqrt") + theme(axis.text.x=element_text(angle=65, hjust=1), axis.text.y=element_blank(), axis.ticks.y=element_blank())
-# heatmap
 ```
 
 Fonction pour visualiser un gène étant donné son identifiant, en terme d'expression normalisée :
 
 
 ```{r plot}
-getExpression <- function(gene, conds = "all"){
-  print(conds)
-  if (length(conds) ==1){
-    conds = colnames(normalized.count)
-  }
-  
-  else{conds = grepl(conds[1], colnames(normalized.count)) | grepl(conds[2], colnames(normalized.count))}
-  df <- normalized.count[gene, conds]
-  library(reshape2)
-  d<- melt(df)
-  d$group = str_split_fixed(rownames(d), "_", 2)[,1]
-  
-  p <- ggplot(data = d, aes(x=group, y=value, fill=group)) + geom_dotplot(binaxis = "y", stackdir = "center") +
-    theme(axis.text.x = element_text(angle = 320,
-                                   hjust = 0, colour = "grey50"), plot.title = element_text( size = 14, face = "bold")) +
-    ggtitle(paste("Normalized expression for ", gene))
-  p
-}
+
 getExpression("AT1G62510")
 getExpression("AT1G62510", conds = c("cNF", "CNF"))
 getExpression("AT1G73120")
@@ -265,26 +240,6 @@ for(coef in colnames(design)){
   print(summary(decideTests(lrt)), p.value = pval)
   plotMD(lrt, cex=0.25)
 }
-
-# 
-# pval = 0.01
-# #et <- exactTest(y)
-# best = topTags(lrt, n = 10000)
-# best = best[best$table$FDR < pval,]
-# #best = best[abs(best$table$logFC) > 1,]
-# 
-# #genes <- rownames(cpm(y, normalized.lib.sizes=TRUE))
-# DEgenes = rownames(best$table)
-# plotBCV(y)
-# 
-# 
-# abline(h=c(-1, 1), col="blue")
-# abline(h=c(0), col="red")
-# print(summary(decideTests(lrt, p.value = 0.05)))
-# print(summary(decideTests(lrt, p.value = 0.01)))
-# 
-# #plots
-# plotMDS(y, top = 100)
 ```
 
 # Fonctions d'analyse pairwise
@@ -378,20 +333,7 @@ dualDE <- function(labels, pval=0.01, method = "edgeR"){
 }
 
 
-OntologyProfile <- function(r){
-  ego <- enrichGO(gene = r$entrezgene_id,
-                OrgDb = org.At.tair.db,
-                ont = "BP",
-                pAdjustMethod = "BH",
-                pvalueCutoff  = 0.01,
-                qvalueCutoff  = 0.05,
-                readable = TRUE)
-  simpOnt <- simplify(ego, cutoff=0.7, by="p.adjust", select_fun=min)
-  simpOnt@result$Description
-  print(barplot(simpOnt, showCategory = 40, font.size = 5))
-  print(dotplot(simpOnt, showCategory = 40, font.size = 5))
-  print(emapplot(simpOnt, layout = "kk"))
-}
+
 
 
 
