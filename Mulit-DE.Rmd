@@ -137,7 +137,7 @@ print(paste(dim(DEgenes)[1], " genes DE"))
 top = DEgenes[1:5000,]
 head(result)
 plot(tcc, ylim = c(-11, 11), main = "Nitrate effect en conditions normales")
-plot(tcc, group = c("group","At_ElevatedCO2_HighNitrate_Fe"), main = "Effet CO2 en conditions normales", ylim = c(-11, 11))
+plot(tcc, group = c("group.","At_ElevatedCO2_HighNitrate_Fe"), main = "Effet CO2 en conditions normales", ylim = c(-11, 11))
 
 plot(tcc, group = c("At_AmbientCO2_HighNitrate_FeStarvation","At_ElevatedCO2_HighNitrate_FeStarvation"), main = "Effet CO2 en Fe starvation", ylim = c(-11, 11))
 
