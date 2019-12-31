@@ -1,0 +1,123 @@
+---
+title: "Analyse d'expression différentielle mutli-facteurs : Fer, Azote et CO2"
+subtitle: "Etude du facteur fer"
+author: "Océane Cassan"
+date: "10/25/2019"
+output: 
+  rmdformats::material:
+    fig_width: 12
+    highlight: kate
+    includes:
+        after_body: footer.html
+---
+
+On cherche à étudier l'effet de trois facteurs sur le transcriptome des racines d'Arabidopsis thaliana.
+Le CO2, au cours des études préliminaires, s'est montré peu influent en conditions contrôles de fer et de nitrates, et accentué en cas de stress nutritionnel.
+Nous reprennons ces résultats avec des fonctions génériques et propres pour en faire le résumé et de jolis graphes.
+
+
+```{r knitr_init, echo=FALSE, cache=FALSE}
+library(knitr, warn.conflicts = F, quietly = T)
+library(rmdformats, warn.conflicts = F, quietly = T)
+
+## Global options
+options(max.print="75")
+opts_chunk$set(cache=FALSE,
+               prompt=FALSE,
+               tidy=TRUE,
+               comment=NA,
+               message=FALSE,
+               warning=FALSE,
+               fig.align = "center")
+opts_knit$set(width=75)
+#setwd("~/Documents/CombinatoireFeNCO2/Combinatoire/")
+library(gridExtra)
+suppressMessages(library(gridExtra, warn.conflicts = F, quietly = T))
+suppressMessages(library(stringr, warn.conflicts = F, quietly = T))
+suppressMessages(library(ggpubr, warn.conflicts = F, quietly = T))
+suppressMessages(library(ggplot2, warn.conflicts = F, quietly = T))
+suppressMessages(library(clusterProfiler, warn.conflicts = F, quietly = T))
+suppressMessages(library(enrichplot, warn.conflicts = F, quietly = T))
+
+
+#self written functions for differential expression
+source("./DEFunctions.R")
+```
+
+
+# Import des données : matrice d'expression
+
+On a, pour chaque gène et chaque condition, son niveau d'expression en sortie de quantification.
+On labelle les conditions avec le code suivant : lettre majuscule pour le niveau fort, minuscule pour le niveau faible. Le réplicat est donné après l'underscore.
+
+```{r data}
+#quantification file
+data <- read.csv("quantifFiles/quantifGenes.csv", h = T, sep = ',')
+rownames(data) <- data$Gene
+genes = which(!(grepl("__", rownames(data))))
+not_quant = data[which((grepl("__", rownames(data)))),]
+data = data[genes,grepl('R', colnames(data))]
+
+getLabel("R6")
+getExactCondition("R4")
+getCondition("R4")
+
+keep <- rowSums(data) >= 10
+data <- data[keep,]
+group <- sapply(colnames(data), getLabel, with.rep = F)
+colnames(data) <- sapply(colnames(data), getLabel)
+head(data)
+dim(data)
+
+getExpression(data, "AT1G01010")
+```
+
+
+
+# Effet fer en conditions contrôle
+
+On définit les conditions contrôle comme suit : CO2 ambiant et fort fer.
+
+```{r contr}
+g = list()
+method = "edger"
+labels <- c("cNf", "cNF")
+genes <- dualDE(data, labels, pval = 0.01, method=method)
+g[[paste(labels[1], labels[2])]] = as.vector(genes$gene_id)
+```
+
+# Fort CO2
+
+```{r lowN}
+labels <- c("CNf", "CNF")
+genes <- dualDE(data, labels, pval = 0.01)
+g[[paste(labels[1], labels[2])]] = genes$gene_id
+```
+
+# Low nitrate
+
+```{r lowF}
+labels <- c("cnf", "cnF")
+genes <- dualDE(data, labels, pval = 0.01)
+g[[paste(labels[1], labels[2])]] = genes$gene_id
+```
+
+# Low nitrate and high CO2
+
+```{r lowBoth}
+labels <- c("Cnf", "CnF")
+genes <- dualDE(data, labels, pval = 0.01)
+g[[paste(labels[1], labels[2])]] = genes$gene_id
+```
+
+
+# Venn diagram
+
+On visualise les gènes différentiellement exprimés en commun entre les différents niveaux des autres facteurs.
+
+```{r venn}
+library(ggVennDiagram)
+library(VennDiagram)
+
+ggVennDiagram(g)
+```

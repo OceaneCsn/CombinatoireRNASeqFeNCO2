@@ -29,7 +29,7 @@ opts_chunk$set(cache=FALSE,
                warning=FALSE,
                fig.align = "center")
 opts_knit$set(width=75)
-setwd("~/Documents/CombinatoireFeNCO2/Combinatoire/")
+#setwd("~/Documents/CombinatoireFeNCO2/Combinatoire/")
 suppressMessages(library(ggplot2))
 library(gridExtra)
 suppressMessages(library(coseq))
@@ -38,7 +38,7 @@ suppressMessages(library(ggpubr, warn.conflicts = F, quietly = T))
 suppressMessages(library(ggplot2, warn.conflicts = F, quietly = T))
 suppressMessages(library(knitr, warn.conflicts = F, quietly = T))
 suppressMessages(library(TCC, warn.conflicts = F, quietly = T))
-suppressMessages(library(biomartr))
+#suppressMessages(library(biomartr))
 suppressMessages(library(biomaRt))
 suppressMessages(library(ggplot2))
 suppressMessages(library(org.At.tair.db, warn.conflicts = F, quietly = T))
@@ -97,6 +97,7 @@ getLabel <- function(id, with.rep = T){
 }
 
 getLabel("R6")
+getLabel("R6", with.rep=F)
 getExactCondition("R4")
 getCondition("R4")
 
@@ -331,10 +332,6 @@ dualDE <- function(labels, pval=0.01, method = "edgeR"){
     return(r)
   }
 }
-
-
-
-
 
 
 mat <- matrix(nrow = length(unique(groups)), ncol = length(unique(groups)))
