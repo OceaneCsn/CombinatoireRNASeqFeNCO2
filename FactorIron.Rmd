@@ -68,8 +68,6 @@ group <- sapply(colnames(data), getLabel, with.rep = F)
 colnames(data) <- sapply(colnames(data), getLabel)
 head(data)
 dim(data)
-
-getExpression(data, "AT1G01010")
 ```
 
 
@@ -82,16 +80,16 @@ On définit les conditions contrôle comme suit : CO2 ambiant et fort fer.
 g = list()
 method = "edger"
 labels <- c("cNf", "cNF")
-genes <- dualDE(data, labels, pval = 0.01, method=method)
-g[[paste(labels[1], labels[2])]] = as.vector(genes$gene_id)
+genes2 <- dualDE(data, labels, pval = 0.01, method=method)
+g[[paste(labels[1], labels[2])]] = genes2
 ```
 
 # Fort CO2
 
 ```{r lowN}
 labels <- c("CNf", "CNF")
-genes <- dualDE(data, labels, pval = 0.01)
-g[[paste(labels[1], labels[2])]] = genes$gene_id
+genes1 <- dualDE(data, labels, pval = 0.01)
+g[[paste(labels[1], labels[2])]] = genes1
 ```
 
 # Low nitrate
@@ -116,8 +114,39 @@ g[[paste(labels[1], labels[2])]] = genes$gene_id
 On visualise les gènes différentiellement exprimés en commun entre les différents niveaux des autres facteurs.
 
 ```{r venn}
+
 library(ggVennDiagram)
 library(VennDiagram)
 
-ggVennDiagram(g)
+gene_list <- list()
+for(comp in names(g)){
+  print( g[[comp]])
+  gene_list[[comp]] <- g[[comp]]$gene_id
+}
+ggVennDiagram(gene_list)
+
+
+
+```
+
+# Summary graph
+
+```{r barplot}
+
+getExpression("AT2G35980", conds = c("cNF", "CNF"))
+d <- data.frame(matrix(ncol = 4, nrow=2))
+colnames(d) <- names(g)
+row.names(d) <- c("up", "down")
+for(comp in names(g)){
+  d["up", comp] <- sum(g[[comp]]$upreg == 1)
+  d["down", comp] <- sum(g[[comp]]$upreg == 0)
+}
+res <- melt(d)
+res$reg = rep(c("up", "down"), 4)
+
+
+ggplot(res, aes(fill=reg, y=value, x=variable)) + 
+    geom_bar(position="stack", stat="identity") +
+    ggtitle("Carbon dioxide effet on gene regulation") +
+    xlab("") + ylab("Number of differentially expressed genes") + coord_flip()
 ```
