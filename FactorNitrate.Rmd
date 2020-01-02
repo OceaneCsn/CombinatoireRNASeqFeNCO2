@@ -32,6 +32,7 @@ opts_chunk$set(cache=FALSE,
 opts_knit$set(width=75)
 #setwd("~/Documents/CombinatoireFeNCO2/Combinatoire/")
 library(gridExtra)
+library(reshape2)
 suppressMessages(library(gridExtra, warn.conflicts = F, quietly = T))
 suppressMessages(library(stringr, warn.conflicts = F, quietly = T))
 suppressMessages(library(ggpubr, warn.conflicts = F, quietly = T))
@@ -52,7 +53,7 @@ On labelle les conditions avec le code suivant : lettre majuscule pour le niveau
 
 ```{r data}
 #quantification file
-data <- read.csv("quantifFiles/quantifGenes.csv", h = T, sep = ',')
+data <- read.csv("quantifFiles/QuantifGenesTomate.csv", h = T, sep = ',')
 rownames(data) <- data$Gene
 genes = which(!(grepl("__", rownames(data))))
 not_quant = data[which((grepl("__", rownames(data)))),]
@@ -69,7 +70,7 @@ colnames(data) <- sapply(colnames(data), getLabel)
 head(data)
 dim(data)
 
-getExpression("AT1G01010")
+#getExpression("AT1G01010")
 ```
 
 
@@ -81,7 +82,7 @@ On définit les conditions contrôle comme suit : CO2 ambiant et fort fer.
 ```{r contr}
 g = list()
 method = "edger"
-labels <- c("cnF", "cNF")
+labels <- c("cNF", "cnF")
 genes1 <- dualDE(data, labels, pval = 0.01, method=method)
 g[[paste(labels[1], labels[2])]] = as.vector(genes1)
 ```
@@ -89,7 +90,7 @@ g[[paste(labels[1], labels[2])]] = as.vector(genes1)
 # Fort CO2
 
 ```{r lowN}
-labels <- c("CnF", "CNF")
+labels <- c("CNF", "CnF")
 genes2 <- dualDE(data, labels, pval = 0.01)
 g[[paste(labels[1], labels[2])]] = genes2
 ```
@@ -97,7 +98,7 @@ g[[paste(labels[1], labels[2])]] = genes2
 # Low iron
 
 ```{r lowF}
-labels <- c("cnf", "cNf")
+labels <- c("cNf", "cnf")
 genes3 <- dualDE(data, labels, pval = 0.01)
 g[[paste(labels[1], labels[2])]] = genes3
 ```
@@ -105,7 +106,7 @@ g[[paste(labels[1], labels[2])]] = genes3
 # Low iron and high CO2
 
 ```{r lowBoth}
-labels <- c("Cnf", "CNf")
+labels <- c("CNf", "Cnf")
 genes4 <- dualDE(data, labels, pval = 0.01)
 g[[paste(labels[1], labels[2])]] = genes4
 ```
@@ -127,13 +128,24 @@ for(comp in names(g)){
 }
 ggVennDiagram(gene_list)
 
+partitions <- get.venn.partitions(gene_list, keep.elements = T)
+partitions$shared <- rowSums(partitions[1:4])
+partitions <- partitions[order(-partitions$shared),]
 
-
+# common_genes <- unlist(partitions[1, "..values.."])
+# results <- getBM( filters = "ensembl_gene_id", attributes = c("ensembl_gene_id", "description", "external_gene_name", "entrezgene_id"),
+#                     values = common_genes, mart = mart)
+# results <- results[!rownames(results) %in% which(duplicated(results$ensembl_gene_id)), ]
+# kable(results)
+# 
+# sharedBy4 <- unique(unlist(subset(partitions, partitions$shared==3)$..values..))
+# a <- OntologyProfileAt(sharedBy4)
 ```
+
+# Summary graph
 
 ```{r barplot}
 
-getExpression("AT2G35980", conds = c("cNF", "CNF"))
 d <- data.frame(matrix(ncol = 4, nrow=2))
 colnames(d) <- names(g)
 row.names(d) <- c("up", "down")

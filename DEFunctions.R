@@ -13,6 +13,8 @@ load("./normalized.count_At.RData")
 
 #shiny::runGitHub("TCC-GUI", "swsoyee", subdir = "TCC-GUI", launch.browser = TRUE)
 
+mart = useMart(biomart="plants_mart",host="plants.ensembl.org", dataset = "athaliana_eg_gene")
+
 ########################################################## sample matching
 
 annot <- read.csv("Code_for_RNAseq_CO2_N_Fr.csv", h = T, sep = ';')
@@ -72,33 +74,46 @@ getExpression <- function(gene, conds = "all"){
 
 ########################################################## Ontology
 
-OntologyProfileAt <- function(r){
-  #Plot ontology enrichment stats of a given data frame of genes for Arabidopsis thaliana
-  # the column of the gene ids must be named entrezgene_id
-  ego <- enrichGO(gene = r$entrezgene_id,
+OntologyProfileAt <- function(ids){
+  #Plot ontology enrichment stats of a given a set of entrezgene IDs
+  # only for Arabidopsis
+  
+  results <- getBM( filters = "ensembl_gene_id", attributes = c("ensembl_gene_id", "description", "external_gene_name", "entrezgene_id"),
+                    values = ids, mart = mart)
+  results <- results[!rownames(results) %in% which(duplicated(results$ensembl_gene_id)), ]
+  kable(results)
+  
+  ego <- enrichGO(gene = results$entrezgene_id,
                   OrgDb = org.At.tair.db,
                   ont = "BP",
                   pAdjustMethod = "BH",
                   pvalueCutoff  = 0.01,
                   qvalueCutoff  = 0.05,
                   readable = TRUE)
-  simpOnt <- simplify(ego, cutoff=0.7, by="p.adjust", select_fun=min)
-  simpOnt@result$Description
-  print(barplot(simpOnt, showCategory = 40, font.size = 5))
-  print(dotplot(simpOnt, showCategory = 40, font.size = 5))
-  print(emapplot(simpOnt, layout = "kk"))
+  
+  #simpOnt <- simplify(ego)
+  # , cutoff=0.7, by="p.adjust", select_fun=min
+  #simpOnt@result$Description
+  print(barplot(ego, showCategory = 40, font.size = 5))
+  #print(dotplot(ego, showCategory = 40, font.size = 5))
+  print(emapplot(ego, layout = "kk"))
+  return(results)
 }
 
 ########################################################## sample matching
 
 dualDE <- function(data, labels, pval=0.01, method="edger", flc_filter = 0){
   # selecting the right labels for pairwise comparison
-  data <- data[,grepl(labels[1], colnames(data)) | grepl(labels[2], colnames(data))]
+  headers <- c(colnames(data)[(grepl(labels[1], colnames(data)))] , colnames(data)[grepl(labels[2], colnames(data))])
+  data <- data[headers]
   group <- str_split_fixed(colnames(data), "_", 2)[,1]
-  
+  group <- factor(group)
+  group <- relevel(group, labels[1])
+  #data <- data[rev(colnames(data))]
   # tcc object
   tcc <- new("TCC", data, group)
-  
+  print(model.matrix(~group))
+  print(colnames(data))
   #2 steps normalisation
   tcc <- calcNormFactors(tcc, norm.method = "tmm", test.method = "edger", iteration = 1, FDR = pval, floorPDEG = 0.05)
   print(tcc$norm.factors)
@@ -112,7 +127,7 @@ dualDE <- function(data, labels, pval=0.01, method="edger", flc_filter = 0){
   tcc <- estimateDE(tcc, test.method = method, FDR = pval, design = model.matrix(~group))
   result <- getResult(tcc, sort = TRUE)
   DEgenes <- subset(result,estimatedDEG==1 & abs(m.value) > flc_filter)
-  DEgenes$upreg = ifelse(DEgenes$m.value > 1, 1, 0)
+  DEgenes$upreg = ifelse(DEgenes$m.value > 0, 1, 0)
   print(paste(dim(DEgenes)[1], " genes DE"))
   head(result)
   plotMDS(normalized.count, main="Multidimensional scaling plot of distances between gene expression profiles")
