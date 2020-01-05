@@ -51,7 +51,7 @@ On labelle les conditions avec le code suivant : lettre majuscule pour le niveau
 
 ```{r data}
 #quantification file
-data <- read.csv("quantifFiles/QuantifGenesTomate.csv", h = T, sep = ',')
+data <- read.csv("quantifFiles/QuantifGenes.csv", h = T, sep = ',')
 rownames(data) <- data$Gene
 genes = which(!(grepl("__", rownames(data))))
 not_quant = data[which((grepl("__", rownames(data)))),]
@@ -155,9 +155,12 @@ for(comp in names(g)){
 res <- melt(d)
 res$reg = rep(c("up", "down"), 4)
 
+genesco2At <- res
+save(genesco2At, file = "genesco2At.RData")
+
 
 ggplot(res, aes(fill=reg, y=value, x=variable)) + 
-    geom_bar(position="stack", stat="identity") +
+    geom_bar(position="stack", stat="identity", alpha=0.5, color = "black") +
     ggtitle("Carbon dioxide effet on gene regulation") +
     xlab("") + ylab("Number of differentially expressed genes") + coord_flip()
 ```

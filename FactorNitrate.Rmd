@@ -53,7 +53,7 @@ On labelle les conditions avec le code suivant : lettre majuscule pour le niveau
 
 ```{r data}
 #quantification file
-data <- read.csv("quantifFiles/QuantifGenesTomate.csv", h = T, sep = ',')
+data <- read.csv("quantifFiles/QuantifGenes.csv", h = T, sep = ',')
 rownames(data) <- data$Gene
 genes = which(!(grepl("__", rownames(data))))
 not_quant = data[which((grepl("__", rownames(data)))),]
@@ -132,20 +132,11 @@ partitions <- get.venn.partitions(gene_list, keep.elements = T)
 partitions$shared <- rowSums(partitions[1:4])
 partitions <- partitions[order(-partitions$shared),]
 
-# common_genes <- unlist(partitions[1, "..values.."])
-# results <- getBM( filters = "ensembl_gene_id", attributes = c("ensembl_gene_id", "description", "external_gene_name", "entrezgene_id"),
-#                     values = common_genes, mart = mart)
-# results <- results[!rownames(results) %in% which(duplicated(results$ensembl_gene_id)), ]
-# kable(results)
-# 
-# sharedBy4 <- unique(unlist(subset(partitions, partitions$shared==3)$..values..))
-# a <- OntologyProfileAt(sharedBy4)
 ```
 
 # Summary graph
 
 ```{r barplot}
-
 d <- data.frame(matrix(ncol = 4, nrow=2))
 colnames(d) <- names(g)
 row.names(d) <- c("up", "down")
@@ -156,9 +147,30 @@ for(comp in names(g)){
 res <- melt(d)
 res$reg = rep(c("up", "down"), 4)
 
+genesNitrateAt <- res
+save(genesNitrateAt, file = "genesNitrateAt.RData")
 
 ggplot(res, aes(fill=reg, y=value, x=variable)) + 
-    geom_bar(position="stack", stat="identity") +
+    geom_bar(position="stack", stat="identity", alpha=0.5, color = "black") +
     ggtitle("Nitrate effet on gene regulation") +
-    xlab("") + ylab("Number of differentially expressed genes") + coord_flip()
+    xlab("") + ylab("Number of differentially expressed genes") + coord_flip() 
 ```
+
+# Etude des genes répondant au nitrate
+
+## Ontologies
+
+```{r pl}
+common_genes <- unlist(partitions[1, "..values.."])
+results <- getBM( filters = "ensembl_gene_id", attributes = c("ensembl_gene_id", "description", "external_gene_name", "entrezgene_id"),
+                    values = common_genes, mart = mart)
+results <- results[!rownames(results) %in% which(duplicated(results$ensembl_gene_id)), ]
+kable(results)
+
+sharedBy4 <- unique(unlist(subset(partitions, partitions$shared==3)$..values..))
+a <- OntologyProfileAt(sharedBy4)
+```
+
+## Clusters
+
+

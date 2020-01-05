@@ -154,3 +154,45 @@ getOneFactorComparisons <- function(factor = 'C'){
   }
   return(res)
 }
+
+###################### Summary  graph of many dualDE from saved objects
+
+plotDEGNumber <- function(){
+  load("genesco2Sl.RData")
+  load("genesIronSl.RData")
+  load("genesNitrateSl.RData")
+  
+  load("genesco2At.RData")
+  load("genesIronAt.RData")
+  load("genesNitrateAt.RData")
+  
+  genesco2Sl$factor = "CO2"
+  genesNitrateSl$factor = "Nitrate"
+  genesIronSl$factor = "Iron"
+  
+  
+  dfSl <- rbind(genesco2Sl, genesIronSl, genesNitrateSl)
+  dfSl$Specie <- "Micro-Tom"
+  
+  genesco2At$factor = "CO2"
+  genesNitrateAt$factor = "Nitrate"
+  genesIronAt$factor = "Iron"
+  
+  
+  dfAt <- rbind(genesco2At, genesIronAt, genesNitrateAt)
+  dfAt$Specie <- "A. thaliana"
+  ggplot(dfAt, aes(fill=reg, y=value, x=variable)) +
+    geom_bar(position="stack", stat="identity", size=1, alpha=0.5) + 
+    ggtitle("CO2, Nitrate and Iron effet on gene regulation - A") + scale_fill_discrete("Set2") +
+    xlab("") + ylab("Number of differentially expressed genes") + coord_flip() + facet_grid(~ factor) 
+  
+  df <- rbind(dfSl, dfAt)
+  
+  ggplot(df, aes(fill=reg, y=value, x=variable)) +
+    geom_bar(position="stack", stat="identity", size=0.3, alpha=0.5, color = "black") + 
+    ggtitle("CO2, Nitrate and Iron effet on gene regulation") +
+    xlab("") + ylab("Number of differentially expressed genes") + coord_flip() + facet_grid(~ Specie) 
+}
+
+######################## Poisson mixture model for gene clustering on expression
+

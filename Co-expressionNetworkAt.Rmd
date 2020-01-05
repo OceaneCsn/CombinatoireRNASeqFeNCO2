@@ -1,0 +1,157 @@
+---
+title: "Relevance network"
+author: "Océane Cassan"
+date: "10/25/2019"
+output: 
+  rmdformats::material:
+    fig_width: 12
+    highlight: kate
+    includes:
+        after_body: footer.html
+---
+
+On cherche à étudier l'effet de trois facteurs sur le transcriptome des racines d'Arabidopsis thaliana.
+
+
+```{r knitr_init, echo=FALSE, cache=FALSE}
+library(knitr, warn.conflicts = F, quietly = T)
+library(rmdformats, warn.conflicts = F, quietly = T)
+
+## Global options
+options(max.print="75")
+opts_chunk$set(cache=FALSE,
+               prompt=FALSE,
+               tidy=TRUE,
+               comment=NA,
+               message=FALSE,
+               warning=FALSE,
+               fig.align = "center")
+opts_knit$set(width=75)
+#setwd("~/Documents/CombinatoireFeNCO2/Combinatoire/")
+library(gridExtra)
+library(reshape2)
+suppressMessages(library(gridExtra, warn.conflicts = F, quietly = T))
+suppressMessages(library(stringr, warn.conflicts = F, quietly = T))
+suppressMessages(library(ggpubr, warn.conflicts = F, quietly = T))
+suppressMessages(library(ggplot2, warn.conflicts = F, quietly = T))
+suppressMessages(library(clusterProfiler, warn.conflicts = F, quietly = T))
+suppressMessages(library(enrichplot, warn.conflicts = F, quietly = T))
+
+
+#self written functions for differential expression
+source("./DEFunctions.R")
+```
+
+# Contexte
+
+Nous voulons généer un premier réseau de régulation de la manière la plus simple possible : le relevance network.
+Nous allons répliquer ce qui a été fait dans l'article de Rodrigo Gutierrez, un step by step guide pour l'analyse RNA-seq et inférence de réseaux.
+Ses données
+"This list of RNA-seq experiments considers profiles from root tissueof wild-type plants grown on different conditions or subjected todifferent treatments."
+
+# Import des données : matrice d'expression
+
+On a, pour chaque gène et chaque condition, son niveau d'expression en sortie de quantification.
+On labelle les conditions avec le code suivant : lettre majuscule pour le niveau fort, minuscule pour le niveau faible. Le réplicat est donné après l'underscore.
+
+```{r data}
+#quantification file
+data <- read.csv("quantifFiles/QuantifGenes.csv", h = T, sep = ',')
+rownames(data) <- data$Gene
+genes = which(!(grepl("__", rownames(data))))
+not_quant = data[which((grepl("__", rownames(data)))),]
+data = data[genes,grepl('R', colnames(data))]
+
+getLabel("R6")
+getExactCondition("R4")
+getCondition("R4")
+
+keep <- rowSums(data) >= 10
+data <- data[keep,]
+group <- sapply(colnames(data), getLabel, with.rep = F)
+colnames(data) <- sapply(colnames(data), getLabel)
+head(data)
+dim(data)
+```
+
+# Expression différentielle
+
+De ce que j'ai compris, on isole des DEG sur deux icnditions, puis on construit le réseau sur toutes les conditions. Si on n'a pas assez de conditions, on n'arrive pas à détecter de corrélations.
+
+```{r contr}
+load("normalized.count_At.RData")
+
+library(EBSeq)
+
+method = "edger"
+labels <- c("cNF", "cnF")
+genes1 <- dualDE(data, labels, pval = 0.01, method=method)
+
+
+headers <- c(colnames(data)[(grepl(labels[1], colnames(data)))] , colnames(data)[grepl(labels[2], colnames(data))])
+norm <- normalized.count[genes1$gene_id,headers]
+counts <- data[genes1$gene_id,]
+NormData<- GetNormalizedMat(counts, MedianNorm(counts))
+
+```
+
+
+# Relevance network
+
+```{r net}
+
+library("psych")
+
+log.data <- log2(NormData+1)
+
+
+Norm.interest.corr<-corr.test(t(log.data), method="pearson", ci=F)
+Norm.interest.corr$p[lower.tri( Norm.interest.corr$p,diag=-TRUE)]=NA
+
+Pval.adj<- as.data.frame(as.table(Norm.interest.corr$p))
+
+Norm.interest.corr$r[lower.tri(Norm.interest.corr$r,diag=TRUE)]=NA
+
+Correlation<-  as.data.frame(as.table(Norm.interest.corr$r))
+
+#corrplot(Norm.interest.corr$r)
+
+
+Cor.table<- na.exclude(cbind( Correlation, Pval.adj))[,c(1,2,3,6)]
+colnames(Cor.table)<- c("gene1","gene2","cor","p.adj")
+Cor.table.filt<- Cor.table [(abs(Cor.table[,3])>0.9 & Cor.table[,4]<0.1 ),]
+library(igraph)
+g<-  graph.data.frame(  Cor.table.filt[,1:2],  directed=-FALSE)
+degree<- degree(g)
+hist(degree, breaks = 30)
+betweenness<- betweenness(g)
+hist(betweenness)
+Node_nw_st<- data.frame( degree, betweenness)
+plot.igraph(g, vertex.size = 5, vertex.label.cex = 0.3 )
+```
+# Poisson log normal
+
+http://julien.cremeriefamily.info/PLNmodels/articles/PLNnetwork.html
+
+https://rdrr.io/cran/PLNmodels/man/
+
+https://mia.toulouse.inra.fr/images/f/f5/NETBIO_ChiquetEtAl.pdf
+
+
+
+```{r pln}
+
+library(PLNmodels)
+library(corrplot)
+data(trichoptera)
+trichoptera <- prepare_data(trichoptera$Abundance, trichoptera$Covariate)
+myPLNnetwork <- PLNnetwork(Abundance ~ 1, data = trichoptera)
+plot(myPLNnetwork)
+myPLNnetwork$inception
+
+myPLNnetwork <- PLNnetwork(Abundance ~ 1, data = trichoptera)
+
+
+```
+
+
