@@ -70,6 +70,7 @@ colnames(data) <- sapply(colnames(data), getLabel)
 head(data)
 dim(data)
 
+specie = "At"
 #getExpression("AT1G01010")
 ```
 
@@ -85,6 +86,9 @@ method = "edger"
 labels <- c("cNF", "cnF")
 genes1 <- dualDE(data, labels, pval = 0.01, method=method)
 g[[paste(labels[1], labels[2])]] = as.vector(genes1)
+
+
+d <- clustering(genes1$gene_id, data)
 ```
 
 # Fort CO2
@@ -167,8 +171,8 @@ results <- getBM( filters = "ensembl_gene_id", attributes = c("ensembl_gene_id",
 results <- results[!rownames(results) %in% which(duplicated(results$ensembl_gene_id)), ]
 kable(results)
 
-sharedBy4 <- unique(unlist(subset(partitions, partitions$shared==3)$..values..))
-a <- OntologyProfileAt(sharedBy4)
+sharedBy3 <- unique(unlist(subset(partitions, partitions$shared==3)$..values..))
+a <- OntologyProfile(sharedBy3, specie = specie)
 ```
 
 ## Clusters

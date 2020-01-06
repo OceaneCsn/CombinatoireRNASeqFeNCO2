@@ -12,7 +12,7 @@ suppressMessages(library(DESeq2, warn.conflicts = F, quietly = T))
 load("./normalized.count_At.RData")
 
 #shiny::runGitHub("TCC-GUI", "swsoyee", subdir = "TCC-GUI", launch.browser = TRUE)
-
+GOMicroTom <- read.table("~/Documents/MicroTom/Shared_Genes_Solyc_Sly1.1.csv", sep = '\t', h = T)
 mart = useMart(biomart="plants_mart",host="plants.ensembl.org", dataset = "athaliana_eg_gene")
 
 ########################################################## sample matching
@@ -74,30 +74,39 @@ getExpression <- function(gene, conds = "all"){
 
 ########################################################## Ontology
 
-OntologyProfileAt <- function(ids){
+OntologyProfile <- function(ids, specie="At"){
   #Plot ontology enrichment stats of a given a set of entrezgene IDs
   # only for Arabidopsis
+  if(specie == "At"){
+    results <- getBM( filters = "ensembl_gene_id", attributes = c("ensembl_gene_id", "description", "external_gene_name", "entrezgene_id"),
+                      values = ids, mart = mart)
+    results <- results[!rownames(results) %in% which(duplicated(results$ensembl_gene_id)), ]
+    kable(results)
+    
+    ego <- enrichGO(gene = results$entrezgene_id,
+                    OrgDb = org.At.tair.db,
+                    ont = "BP",
+                    pAdjustMethod = "BH",
+                    pvalueCutoff  = 0.01,
+                    qvalueCutoff  = 0.05,
+                    readable = TRUE)
+    
+    #simpOnt <- simplify(ego)
+    # , cutoff=0.7, by="p.adjust", select_fun=min
+    #simpOnt@result$Description
+    print(barplot(ego, showCategory = 40, font.size = 5))
+    #print(dotplot(ego, showCategory = 40, font.size = 5))
+    print(emapplot(ego, layout = "kk"))
+    return(results)
+  }
+  if(specie=="Sl"){
+    ont <- GOMicroTom[GOMicroTom$Sly %in% genes1$gene_id,]
+    ont <- ont[match(genes1$gene_id[which(genes1$gene_id %in% ont$Sly)], ont$Sly),]
+    head(ont, )
+    print(paste0(sum(!genes1$gene_id %in% GOMicroTom$Sly), "not in the Micro-Tom annotation..."))
+    return(ont)
+  }
   
-  results <- getBM( filters = "ensembl_gene_id", attributes = c("ensembl_gene_id", "description", "external_gene_name", "entrezgene_id"),
-                    values = ids, mart = mart)
-  results <- results[!rownames(results) %in% which(duplicated(results$ensembl_gene_id)), ]
-  kable(results)
-  
-  ego <- enrichGO(gene = results$entrezgene_id,
-                  OrgDb = org.At.tair.db,
-                  ont = "BP",
-                  pAdjustMethod = "BH",
-                  pvalueCutoff  = 0.01,
-                  qvalueCutoff  = 0.05,
-                  readable = TRUE)
-  
-  #simpOnt <- simplify(ego)
-  # , cutoff=0.7, by="p.adjust", select_fun=min
-  #simpOnt@result$Description
-  print(barplot(ego, showCategory = 40, font.size = 5))
-  #print(dotplot(ego, showCategory = 40, font.size = 5))
-  print(emapplot(ego, layout = "kk"))
-  return(results)
 }
 
 ########################################################## sample matching
@@ -196,3 +205,17 @@ plotDEGNumber <- function(){
 
 ######################## Poisson mixture model for gene clustering on expression
 
+clustering <- function(DEgenes, data, conds="all", nb_clusters = 2:12){
+  
+  if (length(conds) ==1){
+    conds = colnames(data)
+  }
+  dataC <- data[DEgenes,conds]
+  conds <- str_split_fixed(colnames(dataC), '_', 2)[,1]
+  run_pois <- coseq(dataC, conds=conds, K=nb_clusters, model="Poisson",iter = 5, transformation = "none")
+  print(coseq::plot(run_pois))
+  summary(run_pois)
+  clusters_per_genes <- clusters(run_pois)
+  dataC$cluster = clusters_per_genes[as.vector(rownames(dataC))]
+  return(dataC)
+}

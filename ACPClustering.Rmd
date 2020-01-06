@@ -28,8 +28,8 @@ opts_chunk$set(cache=FALSE,
                warning=FALSE,
                fig.align = "center")
 opts_knit$set(width=75)
-#setwd("~/Documents/CombinatoireFeNCO2/Combinatoire/")
-setwd("D:/These/CombinatoireRNASeqFeNCO2")
+setwd("~/Documents/CombinatoireFeNCO2/Combinatoire/")
+#setwd("D:/These/CombinatoireRNASeqFeNCO2")
 suppressMessages(library(ggplot2))
 library(gridExtra)
 suppressMessages(library(coseq))

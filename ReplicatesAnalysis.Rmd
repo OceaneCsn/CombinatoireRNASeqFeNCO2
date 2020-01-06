@@ -62,7 +62,7 @@ p<-ggplot(resMetlted, aes(x = variable, y = value, fill=variable)) +
 p
 
 
-data <- read.csv("quantifFiles/quantifGenesTomate.csv", h = T, sep = ',')
+data <- read.csv("quantifFiles/quantifGenes.csv", h = T, sep = ',')
 rownames(data) <- data$Gene
 genes = which(!(grepl("__", rownames(data))))
 not_quant = data[which((grepl("__", rownames(data)))),]

@@ -30,7 +30,7 @@ opts_chunk$set(cache=FALSE,
                warning=FALSE,
                fig.align = "center")
 opts_knit$set(width=75)
-#setwd("~/Documents/CombinatoireFeNCO2/Combinatoire/")
+setwd("~/Documents/CombinatoireFeNCO2/Combinatoire/")
 library(gridExtra)
 library(reshape2)
 suppressMessages(library(gridExtra, warn.conflicts = F, quietly = T))
@@ -39,6 +39,8 @@ suppressMessages(library(ggpubr, warn.conflicts = F, quietly = T))
 suppressMessages(library(ggplot2, warn.conflicts = F, quietly = T))
 suppressMessages(library(clusterProfiler, warn.conflicts = F, quietly = T))
 suppressMessages(library(enrichplot, warn.conflicts = F, quietly = T))
+suppressMessages(library(ggpubr, warn.conflicts = F, quietly = T))
+
 #self written functions for differential expression
 source("./DEFunctions.R")
 ```
@@ -51,7 +53,7 @@ On labelle les conditions avec le code suivant : lettre majuscule pour le niveau
 
 ```{r data}
 #quantification file
-data <- read.csv("quantifFiles/QuantifGenes.csv", h = T, sep = ',')
+data <- read.csv("quantifFiles/QuantifGenesTomate.csv", h = T, sep = ',')
 rownames(data) <- data$Gene
 genes = which(!(grepl("__", rownames(data))))
 not_quant = data[which((grepl("__", rownames(data)))),]
@@ -67,6 +69,8 @@ group <- sapply(colnames(data), getLabel, with.rep = F)
 colnames(data) <- sapply(colnames(data), getLabel)
 head(data)
 dim(data)
+
+specie = "Sl"
 ```
 
 
@@ -83,6 +87,7 @@ labels <- c("cNF", "CNF")
 genes1 <- dualDE(data, labels, pval = 0.01, method=method)
 g[[paste(labels[1], labels[2])]] = genes1
 sum(genes1$upreg ==1)
+
 ```
 # Low nitrate
 
@@ -130,14 +135,11 @@ partitions <- get.venn.partitions(gene_list, keep.elements = T)
 partitions$shared <- rowSums(partitions[1:4])
 partitions <- partitions[order(-partitions$shared),]
 
-# common_genes <- unlist(partitions[1, "..values.."])
-# results <- getBM( filters = "ensembl_gene_id", attributes = c("ensembl_gene_id", "description", "external_gene_name", "entrezgene_id"),
-#                     values = common_genes, mart = mart)
-# results <- results[!rownames(results) %in% which(duplicated(results$ensembl_gene_id)), ]
-# kable(results)
 
-#sharedBy4 <- unique(unlist(subset(partitions, partitions$shared==3)$..values..))
-#a <- OntologyProfileAt(sharedBy4)
+
+sharedBy4 <- unique(unlist(subset(partitions, partitions$shared==3)$..values..))
+a <- OntologyProfile(sharedBy4, specie = specie)
+print(a[1:100,])
 ```
 
 # Summary graph
@@ -164,3 +166,114 @@ ggplot(res, aes(fill=reg, y=value, x=variable)) +
     ggtitle("Carbon dioxide effet on gene regulation") +
     xlab("") + ylab("Number of differentially expressed genes") + coord_flip()
 ```
+
+# Investigations
+
+
+## Double carence en CO2 ambient et élevé
+
+
+On s'interroge sur l'effet de la double carence fer et nitrate en CO2 ambiant et élevé.
+On ne l'avait pas fait car cela fait varer deux facteurs à la fois.
+
+```{r double carence}
+labels <- c("cnf", "cNF")
+genes5 <- dualDE(data, labels, pval = 0.01)
+labels <- c("Cnf", "CNF")
+genes6 <- dualDE(data, labels, pval = 0.01)
+
+doubleInt <- list("ambiant CO2" = genes5$gene_id, "elevanted CO2" =  genes6$gene_id)
+ggVennDiagram(doubleInt)
+
+OntologyProfile(intersect(genes5$gene_id, genes6$gene_id), specie = specie)
+```
+On trouve énormément de gènes, ce qui est cohérent car le nitrate et le fer pris séparément avaient déjà beaucoup d'effet.
+
+## DEG cNF et CNF avec un autre condition
+
+On cherche à savoir si il n'y pas pas un soucis avec l'échantillon CNF, qui semble avoi très très peu de différences avec cNF. Aurait-on envoyé les mêmes tubes?
+
+On ne voit que très peu de DEGs en comparant directement cNF et CNF, on cherche donc à savoir si on trouve le même nombre de DEGs quand on compare cNF - x et CNF -x, ce qui validerait l'hypothèse d'un transcriptôme quasi identique. On choisit ici par exemple $x=$ cnF.
+
+```{r compa}
+labels <- c("cNF", "cnF")
+genes7 <- dualDE(data, labels, pval = 0.01)
+labels <- c("CNF", "cnF")
+genes8 <- dualDE(data, labels, pval = 0.01)
+
+double <- list("ambiant CO2" = genes7$gene_id, "elevanted CO2" =  genes8$gene_id)
+ggVennDiagram(double)
+```
+
+Il semble qu'il y ait quand même pas mal de différences entre ces transcriptomes, car quand on les compare au même troisième transcriptome on a une différence de 1000 gènes (1900 contre 2800). Le diagramme de Venn montre que ces gènes sont en partie différents. Les transcriptômes ont bien l'air différents. Si on prend un autre x : 
+
+```{r compa2}
+labels <- c("cNF", "cNf")
+genes7 <- dualDE(data, labels, pval = 0.01)
+labels <- c("CNF", "cNf")
+genes8 <- dualDE(data, labels, pval = 0.01)
+
+double <- list("ambiant CO2" = genes7$gene_id, "elevanted CO2" =  genes8$gene_id)
+ggVennDiagram(double)
+
+OntologyProfileAt(intersect(genes7$gene_id, genes8$gene_id), specie = specie)
+```
+
+On va faire les corrélations d'expression entre ces deux conditions.
+
+```{r corr}
+
+scatter <- function(df, x, y) {
+    sp <- ggplot(df, aes(log(df[, x]), log(df[, y]))) + geom_bin2d(bins = 70) + scale_fill_gradient2() + 
+        theme(legend.position = "none") + labs(x = x, y = y)
+    return(sp)
+}
+
+comps <- labels <- c("cNF", "CNF")
+diffs <- c()
+# correlations between ambient and elevated
+for( ambient in colnames(data)[grepl("cNF", colnames(data))]){
+  for( elevated in colnames(data)[grepl("CNF", colnames(data))]){
+    diffs = c(diffs, cor(data[ambient], data[elevated]))
+  }
+}
+
+diffs_other <- c()
+for( ambient in colnames(data)[grepl("cNF", colnames(data))]){
+  for( elevated in colnames(data)[!grepl("NF", colnames(data))]){
+    diffs_other = c(diffs_other, cor(data[ambient], data[elevated]))
+  }
+}
+
+# correlations within ambien and elevated
+sames <- c()
+samples <- colnames(data)[grepl("cNF", colnames(data))]
+sames <- c(sames, cor(data[, samples[1]], data[, samples[2]]), cor(data[, samples[1]], 
+        data[, samples[3]]), cor(data[, samples[2]], data[, samples[3]]))
+samples <- colnames(data)[grepl("CNF", colnames(data))]
+sames <- c(sames, cor(data[, samples[1]], data[, samples[2]]), cor(data[, samples[1]], 
+        data[, samples[3]]), cor(data[, samples[2]], data[, samples[3]]))
+sames
+
+df <- data.frame("Same condition" = c(sames, rep(NA, 3)), "Ambient vs Elevated" = diffs)
+res <- na.omit(melt(df))
+
+# comparisons
+ggplot(data = res, aes(x=variable, y=value, fill=variable)) + geom_boxplot(binaxis = "y", alpha = 0.4, stackdir = "center") +
+    theme(axis.text.x = element_text(angle = 320,
+                                     hjust = 0, colour = "grey50"), plot.title = element_text( size = 14, face = "bold")) +
+    ggtitle("Correlation for expression accross conditions") + geom_dotplot(binaxis = "y", stackdir = "center") + 
+  stat_compare_means(method = "wilcox.test", hide.ns = FALSE, label = "p.signif",
+                     symnum.args = list(cutpoints = c(0, 0.0001, 0.001, 0.01, 0.05, 1), symbols = c("****", "***", "**", "*", "ns")))
+
+res <- rbind.data.frame(res, data.frame("variable" = rep("cNF vs all others except CNF", length(diffs_other)), "value" = diffs_other))
+
+ggplot(data = res, aes(x=variable, y=value, fill=variable)) + geom_boxplot(binaxis = "y", alpha = 0.4, stackdir = "center") +
+    theme(axis.text.x = element_text(angle = 320,
+                                     hjust = 0, colour = "grey50"), plot.title = element_text( size = 14, face = "bold")) +
+    ggtitle("Correlation for expression accross conditions") + geom_dotplot(binaxis = "y", stackdir = "center") + 
+  stat_compare_means(method = "wilcox.test", hide.ns = FALSE, label = "p.signif",
+                     symnum.args = list(cutpoints = c(0, 0.0001, 0.001, 0.01, 0.05, 1), symbols = c("****", "***", "**", "*", "ns")))
+```
+ cNF et CNF semblent bien plus proches entre eux que cNF ne l'est avec tous les autres.
+
