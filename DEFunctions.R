@@ -9,6 +9,11 @@ suppressMessages(library(org.At.tair.db, warn.conflicts = F, quietly = T))
 suppressMessages(library(clusterProfiler, warn.conflicts = F, quietly = T))
 suppressMessages(library(enrichplot, warn.conflicts = F, quietly = T))
 suppressMessages(library(DESeq2, warn.conflicts = F, quietly = T))
+suppressMessages(library(coseq, warn.conflicts = F, quietly = T))
+suppressMessages(library(ade4, warn.conflicts = F, quietly = T))
+suppressMessages(library(adegraphics, warn.conflicts = F, quietly = T))
+suppressMessages(library(RColorBrewer, warn.conflicts = F, quietly = T))
+
 load("./normalized.count_At.RData")
 
 #shiny::runGitHub("TCC-GUI", "swsoyee", subdir = "TCC-GUI", launch.browser = TRUE)
@@ -106,19 +111,17 @@ OntologyProfile <- function(ids, specie="At"){
     print(paste0(sum(!genes1$gene_id %in% GOMicroTom$Sly), "not in the Micro-Tom annotation..."))
     return(ont)
   }
-  
 }
 
 ########################################################## sample matching
 
-dualDE <- function(data, labels, pval=0.01, method="edger", flc_filter = 0){
+dualDE <- function(data, labels, pval=0.01, method="edger", flc_filter = 0, plot=T){
   # selecting the right labels for pairwise comparison
   headers <- c(colnames(data)[(grepl(labels[1], colnames(data)))] , colnames(data)[grepl(labels[2], colnames(data))])
   data <- data[headers]
   group <- str_split_fixed(colnames(data), "_", 2)[,1]
   group <- factor(group)
   group <- relevel(group, labels[1])
-  #data <- data[rev(colnames(data))]
   # tcc object
   tcc <- new("TCC", data, group)
   print(model.matrix(~group))
@@ -128,10 +131,11 @@ dualDE <- function(data, labels, pval=0.01, method="edger", flc_filter = 0){
   print(tcc$norm.factors)
   tcc$DEGES$execution.time
   s <- sample(rownames(tcc$count), size = 200)
-  heatmap(as.matrix(tcc$count[s,]), main = "Before normalisation")
   normalized.count <- getNormalizedData(tcc)
-  heatmap(as.matrix(normalized.count[s,]), main = "After normalisation")
-  
+  if(plot){
+    heatmap(as.matrix(tcc$count[s,]), main = "Before normalisation")
+    heatmap(as.matrix(normalized.count[s,]), main = "After normalisation")
+  }
   #DEtest
   tcc <- estimateDE(tcc, test.method = method, FDR = pval, design = model.matrix(~group))
   result <- getResult(tcc, sort = TRUE)
@@ -139,9 +143,11 @@ dualDE <- function(data, labels, pval=0.01, method="edger", flc_filter = 0){
   DEgenes$upreg = ifelse(DEgenes$m.value > 0, 1, 0)
   print(paste(dim(DEgenes)[1], " genes DE"))
   head(result)
-  plotMDS(normalized.count, main="Multidimensional scaling plot of distances between gene expression profiles")
-  plot(tcc)
-  heatmap(normalized.count[DEgenes$gene_id,])
+  if(plot){
+    plotMDS(normalized.count, main="Multidimensional scaling plot of distances between gene expression profiles")
+    plot(tcc)
+    heatmap(normalized.count[DEgenes$gene_id,])
+  }
   return(DEgenes)
 }
 
@@ -206,16 +212,35 @@ plotDEGNumber <- function(){
 ######################## Poisson mixture model for gene clustering on expression
 
 clustering <- function(DEgenes, data, conds="all", nb_clusters = 2:12){
-  
   if (length(conds) ==1){
     conds = colnames(data)
+    groups <- str_split_fixed(conds, '_', 2)[,1]
   }
   dataC <- data[DEgenes,conds]
   conds <- str_split_fixed(colnames(dataC), '_', 2)[,1]
-  run_pois <- coseq(dataC, conds=conds, K=nb_clusters, model="Poisson",iter = 5, transformation = "none")
-  print(coseq::plot(run_pois))
+  run_pois <- coseq(dataC, conds=groups, K=nb_clusters, model="Poisson",iter = 5, transformation = "none")
+  print(coseq::plot(run_pois, conds = groups, collapse_reps="average", graphs = c("ICL", "boxplots", "profiles", "probapost_barplots")))
   summary(run_pois)
   clusters_per_genes <- clusters(run_pois)
-  dataC$cluster = clusters_per_genes[as.vector(rownames(dataC))]
-  return(dataC)
+  return(clusters_per_genes)
+}
+
+
+###################### ACP on gene expression, and visualisation of clusters
+
+ACP <- function(data, clusteredGenes){
+  acp <- dudi.pca(log(data+0.1), center = TRUE, scale = TRUE, scannf = FALSE, nf = 4)
+  print(summary(acp))
+  data$cluster = clusteredGenes[as.vector(rownames(data))]
+  
+  s.corcircle(acp$co, xax=1, yax=2, fullcircle = FALSE, pback.col = "lightgrey")
+  adegraphics::s.class(acp$li, xax =  1, yax = 2, as.factor(data$cluster), labels = as.character(levels(as.factor(data$cluster))), col = brewer.pal(n = 10, name = "Paired"), chullSize = 1, ellipseSize = 0, plabels.cex = 0.7, pbackground.col = "grey85", main = "Clusters dans le plan principal", ylim = c(-9, 9))
+  
+  s.corcircle(acp$co, xax=2, yax=3, fullcircle = FALSE, pback.col = "lightgrey")
+  
+  adegraphics::s.class(acp$li, xax =  2, yax = 3, as.factor(data$cluster), labels = as.character(levels(as.factor(data$cluster))), col = brewer.pal(n = 10, name = "Paired"), chullSize = 1, ellipseSize = 0, plabels.cex = 0.7, pbackground.col = "grey85", main = "Clusters dans le plan principal")
+  
+  s.corcircle(acp$co, xax=4, yax=2, fullcircle = FALSE, pback.col = "lightgrey")
+  
+  adegraphics::s.class(acp$li, xax =  4, yax = 2, as.factor(data$cluster), labels = as.character(levels(as.factor(data$cluster))), col = brewer.pal(n = 10, name = "Paired"), chullSize = 1, ellipseSize = 0, plabels.cex = 0.7, pbackground.col = "grey85", main = "Clusters dans le plan principal")
 }

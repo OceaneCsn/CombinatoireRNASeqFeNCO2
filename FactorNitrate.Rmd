@@ -173,8 +173,8 @@ kable(results)
 
 sharedBy3 <- unique(unlist(subset(partitions, partitions$shared==3)$..values..))
 a <- OntologyProfile(sharedBy3, specie = specie)
-```
 
-## Clusters
+save(sharedBy3, file = paste0("GenesNitrate_", specie, ".RData"))
+```
 
 

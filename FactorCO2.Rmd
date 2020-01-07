@@ -53,7 +53,7 @@ On labelle les conditions avec le code suivant : lettre majuscule pour le niveau
 
 ```{r data}
 #quantification file
-data <- read.csv("quantifFiles/QuantifGenesTomate.csv", h = T, sep = ',')
+data <- read.csv("quantifFiles/QuantifGenes.csv", h = T, sep = ',')
 rownames(data) <- data$Gene
 genes = which(!(grepl("__", rownames(data))))
 not_quant = data[which((grepl("__", rownames(data)))),]
@@ -70,7 +70,7 @@ colnames(data) <- sapply(colnames(data), getLabel)
 head(data)
 dim(data)
 
-specie = "Sl"
+specie = "At"
 ```
 
 
@@ -137,12 +137,15 @@ partitions <- partitions[order(-partitions$shared),]
 
 
 
-sharedBy4 <- unique(unlist(subset(partitions, partitions$shared==3)$..values..))
-a <- OntologyProfile(sharedBy4, specie = specie)
+sharedBy3 <- unique(unlist(subset(partitions, partitions$shared==3)$..values..))
+a <- OntologyProfile(sharedBy3, specie = specie)
 print(a[1:100,])
+save(sharedBy3, file = paste0("GenesCO2_", specie, ".RData"))
 ```
 
 # Summary graph
+
+For each comparison, we want to see how many genes are detected as DE.
 
 ```{r barplot}
 
@@ -184,7 +187,6 @@ genes6 <- dualDE(data, labels, pval = 0.01)
 
 doubleInt <- list("ambiant CO2" = genes5$gene_id, "elevanted CO2" =  genes6$gene_id)
 ggVennDiagram(doubleInt)
-
 OntologyProfile(intersect(genes5$gene_id, genes6$gene_id), specie = specie)
 ```
 On trouve énormément de gènes, ce qui est cohérent car le nitrate et le fer pris séparément avaient déjà beaucoup d'effet.
@@ -196,13 +198,19 @@ On cherche à savoir si il n'y pas pas un soucis avec l'échantillon CNF, qui se
 On ne voit que très peu de DEGs en comparant directement cNF et CNF, on cherche donc à savoir si on trouve le même nombre de DEGs quand on compare cNF - x et CNF -x, ce qui validerait l'hypothèse d'un transcriptôme quasi identique. On choisit ici par exemple $x=$ cnF.
 
 ```{r compa}
-labels <- c("cNF", "cnF")
-genes7 <- dualDE(data, labels, pval = 0.01)
-labels <- c("CNF", "cnF")
-genes8 <- dualDE(data, labels, pval = 0.01)
-
-double <- list("ambiant CO2" = genes7$gene_id, "elevanted CO2" =  genes8$gene_id)
-ggVennDiagram(double)
+res <- c()
+for(x in c("cnF", "cnf", "cNf", "CnF", "Cnf", "CNf")){
+  labels <- c("cNF", x)
+  genes7 <- dualDE(data, labels, pval = 0.01, plot = F)
+  labels <- c("CNF", x)
+  genes8 <- dualDE(data, labels, pval = 0.01, plot = F)
+  double <- list("ambiant CO2" = genes7$gene_id, "elevanted CO2" =  genes8$gene_id)
+  print(ggVennDiagram(double))
+  partitions <- get.venn.partitions(double)
+  res <- c(res, (partitions[2, "..count.."]+partitions[3, "..count.."])/sum(partitions[,"..count.."])*100)
+}
+print("Pourcentage des gènes DE qui ne sont pas partagés par les deux comparaisons :")
+print(res)
 ```
 
 Il semble qu'il y ait quand même pas mal de différences entre ces transcriptomes, car quand on les compare au même troisième transcriptome on a une différence de 1000 gènes (1900 contre 2800). Le diagramme de Venn montre que ces gènes sont en partie différents. Les transcriptômes ont bien l'air différents. Si on prend un autre x : 

@@ -69,6 +69,8 @@ group <- sapply(colnames(data), getLabel, with.rep = F)
 colnames(data) <- sapply(colnames(data), getLabel)
 head(data)
 dim(data)
+
+specie = "At"
 ```
 
 
@@ -137,8 +139,9 @@ partitions <- partitions[order(-partitions$shared),]
 # results <- results[!rownames(results) %in% which(duplicated(results$ensembl_gene_id)), ]
 # kable(results)
 # 
-# sharedBy4 <- unique(unlist(subset(partitions, partitions$shared==3)$..values..))
-# a <- OntologyProfileAt(sharedBy4)
+sharedBy3 <- unique(unlist(subset(partitions, partitions$shared==3)$..values..))
+a <- OntologyProfile(sharedBy3)
+save(sharedBy3, file = paste0("GenesIron_", specie, ".RData"))
 ```
 
 # Summary graph
