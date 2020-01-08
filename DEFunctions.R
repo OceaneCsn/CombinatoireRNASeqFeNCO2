@@ -14,10 +14,10 @@ suppressMessages(library(ade4, warn.conflicts = F, quietly = T))
 suppressMessages(library(adegraphics, warn.conflicts = F, quietly = T))
 suppressMessages(library(RColorBrewer, warn.conflicts = F, quietly = T))
 
-load("./normalized.count_At.RData")
+
 
 #shiny::runGitHub("TCC-GUI", "swsoyee", subdir = "TCC-GUI", launch.browser = TRUE)
-GOMicroTom <- read.table("~/Documents/MicroTom/Shared_Genes_Solyc_Sly1.1.csv", sep = '\t', h = T)
+#GOMicroTom <- read.table("~/Documents/MicroTom/Shared_Genes_Solyc_Sly1.1.csv", sep = '\t', h = T)
 mart = useMart(biomart="plants_mart",host="plants.ensembl.org", dataset = "athaliana_eg_gene")
 
 ########################################################## sample matching
@@ -56,10 +56,12 @@ getLabel <- function(id, with.rep = T){
 
 ########################################################## show expression
 
-getExpression <- function(gene, conds = "all"){
+getExpression <- function(gene, conds = "all", specie = "At"){
   # Plots the expression levels of a given gene, using the normized.count data provoded.
   # conditions are all the columns of the data by default, or can be specified
   # biological replicated should be identified by _n
+  if(specie == "At") load("./normalized.count_At.RData")
+  if(specie == "Sl") load("./normalized.count_Sl.RData")
   if (length(conds) ==1){
     conds = colnames(normalized.count)
   }else{conds = grepl(conds[1], colnames(normalized.count)) | grepl(conds[2], colnames(normalized.count))}

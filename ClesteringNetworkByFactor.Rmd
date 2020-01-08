@@ -27,7 +27,7 @@ opts_chunk$set(cache=FALSE,
                warning=FALSE,
                fig.align = "center")
 opts_knit$set(width=75)
-setwd("~/Documents/CombinatoireFeNCO2/Combinatoire/")
+#setwd("~/Documents/CombinatoireFeNCO2/Combinatoire/")
 library(gridExtra)
 library(reshape2)
 suppressMessages(library(gridExtra, warn.conflicts = F, quietly = T))
@@ -37,9 +37,12 @@ suppressMessages(library(ggplot2, warn.conflicts = F, quietly = T))
 suppressMessages(library(clusterProfiler, warn.conflicts = F, quietly = T))
 suppressMessages(library(enrichplot, warn.conflicts = F, quietly = T))
 suppressMessages(library(ggpubr, warn.conflicts = F, quietly = T))
-
+suppressMessages(library(psych, warn.conflicts = F, quietly = T))
+suppressMessages(library(igraph, warn.conflicts = F, quietly = T))
 #self written functions for differential expression
 source("./DEFunctions.R")
+
+specie = "At"
 ```
 
 # CO2
@@ -47,7 +50,7 @@ source("./DEFunctions.R")
 ## Clustering
 
 ```{r cluster}
-load("GenesCO2_At.RData")
+load(paste0("GenesCO2_",specie,".RData"))
 
 #quantification file
 data <- read.csv("quantifFiles/QuantifGenes.csv", h = T, sep = ',')
@@ -63,7 +66,18 @@ colnames(data) <- sapply(colnames(data), getLabel)
 
 specie = "At"
 clusteredGenes <- clustering(sharedBy3, data)
+
+
+# On essaie un autre clustering avec lka librarie MPLN
+#mpln (dataset = as.matrix(data[sharedBy3,]))
+#beaucoup trop long, même mutlithreadé, c'est n'imp
 ```
+
+Model-Based Clustering Using MPLN (Parallelized)
+Description
+Performs clustering using mixtures of multivariate Poisson-log normal (MPLN) distribution and model selection using AIC, AIC3, BIC and ICL. Since each component/cluster size (G) is independent from another, all Gs in the range to be tested have been parallelized to run on a seperate core using the parallel R package.
+
+
 
 ## Visualisation en ACP
 
@@ -75,12 +89,58 @@ ACP(data[sharedBy3,], clusteredGenes)
 
 ## Réseau 
 
+```{r net}
+
+load("./normalized.count_At.RData")
+log.data <- log2(normalized.count[sharedBy3,]+1)
+
+
+Norm.interest.corr<-corr.test(t(log.data), method="pearson", ci=F)
+Norm.interest.corr$p[lower.tri( Norm.interest.corr$p,diag=-TRUE)]=NA
+Pval.adj<- as.data.frame(as.table(Norm.interest.corr$p))
+Norm.interest.corr$r[lower.tri(Norm.interest.corr$r,diag=TRUE)]=NA
+Correlation<-  as.data.frame(as.table(Norm.interest.corr$r))
+Cor.table<- na.exclude(cbind( Correlation, Pval.adj))[,c(1,2,3,6)]
+colnames(Cor.table)<- c("gene1","gene2","cor","p.adj")
+Cor.table.filt<- Cor.table [(abs(Cor.table[,3])>0.9 & Cor.table[,4]<0.01 ),]
+
+g<-  graph.data.frame(  Cor.table.filt[,1:2],  directed=-FALSE)
+V(g)$color <- clusteredGenes[V(g)]
+degree<- degree(g)
+hist(degree, breaks = 30)
+betweenness<- betweenness(g)
+hist(betweenness)
+Node_nw_st<- data.frame( degree, betweenness)
+plot.igraph(g, vertex.size = 5, vertex.label.cex = 0.3, color = clusteredGenes) 
+```
+
 # Nitrate
 
 ```{r nitrate}
 load("GenesNitrate_At.RData")
 clusteredGenes <- clustering(sharedBy3, data)
 ACP(data[sharedBy3,], clusteredGenes)
+
+log.data <- log2(normalized.count[sharedBy3,]+1)
+
+
+Norm.interest.corr<-corr.test(t(log.data), method="pearson", ci=F)
+Norm.interest.corr$p[lower.tri( Norm.interest.corr$p,diag=-TRUE)]=NA
+Pval.adj<- as.data.frame(as.table(Norm.interest.corr$p))
+Norm.interest.corr$r[lower.tri(Norm.interest.corr$r,diag=TRUE)]=NA
+Correlation<-  as.data.frame(as.table(Norm.interest.corr$r))
+Cor.table<- na.exclude(cbind( Correlation, Pval.adj))[,c(1,2,3,6)]
+colnames(Cor.table)<- c("gene1","gene2","cor","p.adj")
+Cor.table.filt<- Cor.table [(abs(Cor.table[,3])>0.9 & Cor.table[,4]<0.01 ),]
+
+g<-  graph.data.frame(  Cor.table.filt[,1:2],  directed=-FALSE)
+V(g)$color <- clusteredGenes[V(g)]
+degree<- degree(g)
+hist(degree, breaks = 30)
+betweenness<- betweenness(g)
+hist(betweenness)
+Node_nw_st<- data.frame( degree, betweenness)
+plot.igraph(g, vertex.size = 5, vertex.label.cex = 0.01, color = clusteredGenes) 
 ```
 
 # Iron
@@ -89,4 +149,25 @@ ACP(data[sharedBy3,], clusteredGenes)
 load("GenesIron_At.RData")
 clusteredGenes <- clustering(sharedBy3, data)
 ACP(data[sharedBy3,], clusteredGenes)
+
+log.data <- log2(normalized.count[sharedBy3,]+1)
+
+
+Norm.interest.corr<-corr.test(t(log.data), method="pearson", ci=F)
+Norm.interest.corr$p[lower.tri( Norm.interest.corr$p,diag=-TRUE)]=NA
+Pval.adj<- as.data.frame(as.table(Norm.interest.corr$p))
+Norm.interest.corr$r[lower.tri(Norm.interest.corr$r,diag=TRUE)]=NA
+Correlation<-  as.data.frame(as.table(Norm.interest.corr$r))
+Cor.table<- na.exclude(cbind( Correlation, Pval.adj))[,c(1,2,3,6)]
+colnames(Cor.table)<- c("gene1","gene2","cor","p.adj")
+Cor.table.filt<- Cor.table [(abs(Cor.table[,3])>0.9 & Cor.table[,4]<0.01 ),]
+
+g<-  graph.data.frame(  Cor.table.filt[,1:2],  directed=-FALSE)
+V(g)$color <- clusteredGenes[V(g)]
+degree<- degree(g)
+hist(degree, breaks = 30)
+betweenness<- betweenness(g)
+hist(betweenness)
+Node_nw_st<- data.frame( degree, betweenness)
+plot.igraph(g, vertex.size = 5, vertex.label.cex = 0.01, color = clusteredGenes) 
 ```
