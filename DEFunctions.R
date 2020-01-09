@@ -141,13 +141,27 @@ dualDE <- function(data, labels, pval=0.01, method="edger", flc_filter = 0, plot
   #DEtest
   tcc <- estimateDE(tcc, test.method = method, FDR = pval, design = model.matrix(~group))
   result <- getResult(tcc, sort = TRUE)
+  
+  
+  
   DEgenes <- subset(result,estimatedDEG==1 & abs(m.value) > flc_filter)
   DEgenes$upreg = ifelse(DEgenes$m.value > 0, 1, 0)
   print(paste(dim(DEgenes)[1], " genes DE"))
   head(result)
   if(plot){
+    print(ggplot(data = result, aes(a.value, m.value, color=factor(estimatedDEG))) +
+      scale_fill_discrete("Set2") + geom_point(alpha=0.7) + ggtitle(paste0("M.A Plot : ", labels[2], " vs ", labels[1])) + xlab("Average expression") + ylab("Log Fold Change")+ theme(
+        plot.title = element_text(size = 20, face="bold")) + labs(color = "Is DE"))
+    
+    
+    print(ggplot(data = result, aes(m.value, -log10(q.value), color=factor(estimatedDEG))) +
+      scale_fill_discrete("Set2") + geom_point(alpha=0.7) + ggtitle(paste0("Vulcano Plot : ", labels[2], " vs ", labels[1])) +
+      xlab("Log Fold Change") + ylab("-Log(adj.pvalue)") + theme(
+        plot.title = element_text(size = 20, face="bold")) + labs(color = "Is DE"))
+    
+    
     plotMDS(normalized.count, main="Multidimensional scaling plot of distances between gene expression profiles")
-    plot(tcc)
+    #plot(tcc)
     heatmap(normalized.count[DEgenes$gene_id,])
   }
   return(DEgenes)

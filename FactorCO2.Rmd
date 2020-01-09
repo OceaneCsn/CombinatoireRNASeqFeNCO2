@@ -89,8 +89,13 @@ g[[paste(labels[1], labels[2])]] = genes1
 sum(genes1$upreg ==1)
 
 a <- OntologyProfile(genes1$gene_id)
+a$flc <- genes1[match(a$ensembl_gene_id,genes1$gene_id),]$m.value
+a$p.value <- genes1[match(a$ensembl_gene_id,genes1$gene_id),]$p.value
+a <- a[order(a$p.value),]
 kable(a)
+
 ```
+
 # Low nitrate
 
 ```{r lowN}
