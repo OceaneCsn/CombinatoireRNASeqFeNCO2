@@ -88,6 +88,8 @@ genes1 <- dualDE(data, labels, pval = 0.01, method=method)
 g[[paste(labels[1], labels[2])]] = genes1
 sum(genes1$upreg ==1)
 
+a <- OntologyProfile(genes1$gene_id)
+kable(a)
 ```
 # Low nitrate
 
@@ -224,7 +226,7 @@ genes8 <- dualDE(data, labels, pval = 0.01)
 double <- list("ambiant CO2" = genes7$gene_id, "elevanted CO2" =  genes8$gene_id)
 ggVennDiagram(double)
 
-OntologyProfileAt(intersect(genes7$gene_id, genes8$gene_id), specie = specie)
+OntologyProfile(intersect(genes7$gene_id, genes8$gene_id), specie = specie)
 ```
 
 On va faire les corrélations d'expression entre ces deux conditions.

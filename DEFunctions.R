@@ -223,7 +223,7 @@ clustering <- function(DEgenes, data, conds="all", nb_clusters = 2:12){
   run_pois <- coseq(dataC, conds=groups, K=nb_clusters, model="Poisson",iter = 5, transformation = "none")
   print(coseq::plot(run_pois, conds = groups, collapse_reps="average", graphs = c("ICL", "boxplots", "profiles", "probapost_barplots")))
   summary(run_pois)
-  clusters_per_genes <- clusters(run_pois)
+  clusters_per_genes <- coseq::clusters(run_pois)
   return(clusters_per_genes)
 }
 

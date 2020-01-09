@@ -50,7 +50,7 @@ specie = "At"
 ## Clustering
 
 ```{r cluster}
-load(paste0("GenesCO2_",specie,".RData"))
+load(paste0("./GenesCO2_",specie,".RData"))
 
 #quantification file
 data <- read.csv("quantifFiles/QuantifGenes.csv", h = T, sep = ',')
@@ -66,6 +66,22 @@ colnames(data) <- sapply(colnames(data), getLabel)
 
 specie = "At"
 clusteredGenes <- clustering(sharedBy3, data)
+
+a <- OntologyProfile(sharedBy3)
+a$cluster <- clusteredGenes[a$ensembl_gene_id]
+
+entrezID <- list()
+nb_clust = max(clusteredGenes)
+for (clust in seq(1:nb_clust)) {
+    # print(entrez[entrez$cluster == clust,]$ensembl_transcript_id)
+    entrezID[[length(entrezID) + 1]] <- na.omit(a[a$cluster == clust, ]$entrezgene_id)
+}
+names(entrezID) <- as.character(seq(1:nb_clust))
+
+ck <- compareCluster(geneCluster = entrezID, fun = "enrichGO", OrgDb = org.At.tair.db, ont = "BP", pAdjustMethod = "BH", 
+    pvalueCutoff = 0.01, qvalueCutoff = 0.05)
+
+clusterProfiler::dotplot(ck, x = ~Cluster)
 
 
 # On essaie un autre clustering avec lka librarie MPLN
@@ -112,6 +128,18 @@ betweenness<- betweenness(g)
 hist(betweenness)
 Node_nw_st<- data.frame( degree, betweenness)
 plot.igraph(g, vertex.size = 5, vertex.label.cex = 0.3, color = clusteredGenes) 
+
+library(d3r)
+
+data_json <- d3_igraph(g)
+write(data_json, "data.json")
+
+
+write.table(Cor.table.filt, "GraphCO2.txt", sep="\t", row.names=F, quote=F)
+
+Rank_stat <- rowMeans(cbind(rank(Node_nw_st[,1]), rank(Node_nw_st[,2])))
+Node_nw_st <- cbind(Node_nw_st, Rank_stat)
+write.table(Node_nw_st,file="StatsCO2.txt", sep="\t", col.names = NA, quote=F)
 ```
 
 # Nitrate
@@ -141,6 +169,23 @@ betweenness<- betweenness(g)
 hist(betweenness)
 Node_nw_st<- data.frame( degree, betweenness)
 plot.igraph(g, vertex.size = 5, vertex.label.cex = 0.01, color = clusteredGenes) 
+
+
+a <- OntologyProfile(sharedBy3)
+a$cluster <- clusteredGenes[a$ensembl_gene_id]
+
+entrezID <- list()
+nb_clust = max(clusteredGenes)
+for (clust in seq(1:nb_clust)) {
+    # print(entrez[entrez$cluster == clust,]$ensembl_transcript_id)
+    entrezID[[length(entrezID) + 1]] <- na.omit(a[a$cluster == clust, ]$entrezgene_id)
+}
+names(entrezID) <- as.character(seq(1:nb_clust))
+
+ck <- compareCluster(geneCluster = entrezID, fun = "enrichGO", OrgDb = org.At.tair.db, ont = "BP", pAdjustMethod = "BH", 
+    pvalueCutoff = 0.01, qvalueCutoff = 0.05)
+
+clusterProfiler::dotplot(ck, x = ~Cluster)
 ```
 
 # Iron
@@ -170,4 +215,20 @@ betweenness<- betweenness(g)
 hist(betweenness)
 Node_nw_st<- data.frame( degree, betweenness)
 plot.igraph(g, vertex.size = 5, vertex.label.cex = 0.01, color = clusteredGenes) 
+
+a <- OntologyProfile(sharedBy3)
+a$cluster <- clusteredGenes[a$ensembl_gene_id]
+
+entrezID <- list()
+nb_clust = max(clusteredGenes)
+for (clust in seq(1:nb_clust)) {
+    # print(entrez[entrez$cluster == clust,]$ensembl_transcript_id)
+    entrezID[[length(entrezID) + 1]] <- na.omit(a[a$cluster == clust, ]$entrezgene_id)
+}
+names(entrezID) <- as.character(seq(1:nb_clust))
+
+ck <- compareCluster(geneCluster = entrezID, fun = "enrichGO", OrgDb = org.At.tair.db, ont = "BP", pAdjustMethod = "BH", 
+    pvalueCutoff = 0.01, qvalueCutoff = 0.05)
+
+clusterProfiler::dotplot(ck, x = ~Cluster)
 ```
