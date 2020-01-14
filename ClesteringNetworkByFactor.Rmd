@@ -27,7 +27,7 @@ opts_chunk$set(cache=FALSE,
                warning=FALSE,
                fig.align = "center")
 opts_knit$set(width=75)
-#setwd("~/Documents/CombinatoireFeNCO2/Combinatoire/")
+setwd("~/Documents/CombinatoireFeNCO2/Combinatoire/")
 library(gridExtra)
 library(reshape2)
 suppressMessages(library(gridExtra, warn.conflicts = F, quietly = T))
@@ -51,6 +51,9 @@ specie = "At"
 
 ```{r cluster}
 load(paste0("./GenesCO2_",specie,".RData"))
+
+
+load("./normalized.count_At.RData")
 
 #quantification file
 data <- read.csv("quantifFiles/QuantifGenes.csv", h = T, sep = ',')
@@ -99,7 +102,7 @@ Performs clustering using mixtures of multivariate Poisson-log normal (MPLN) dis
 
 ```{r acp}
 
-ACP(data[sharedBy3,], clusteredGenes)
+ACP(normalized.count[sharedBy3,], clusteredGenes)
 
 ```
 
@@ -107,7 +110,6 @@ ACP(data[sharedBy3,], clusteredGenes)
 
 ```{r net}
 
-load("./normalized.count_At.RData")
 log.data <- log2(normalized.count[sharedBy3,]+1)
 
 
@@ -147,7 +149,7 @@ write.table(Node_nw_st,file="StatsCO2.txt", sep="\t", col.names = NA, quote=F)
 ```{r nitrate}
 load("GenesNitrate_At.RData")
 clusteredGenes <- clustering(sharedBy3, data)
-ACP(data[sharedBy3,], clusteredGenes)
+ACP(normalized.count[sharedBy3,], clusteredGenes)
 
 log.data <- log2(normalized.count[sharedBy3,]+1)
 
@@ -193,7 +195,7 @@ clusterProfiler::dotplot(ck, x = ~Cluster)
 ```{r iron}
 load("GenesIron_At.RData")
 clusteredGenes <- clustering(sharedBy3, data)
-ACP(data[sharedBy3,], clusteredGenes)
+ACP(normalized.count[sharedBy3,], clusteredGenes)
 
 log.data <- log2(normalized.count[sharedBy3,]+1)
 
@@ -232,3 +234,59 @@ ck <- compareCluster(geneCluster = entrezID, fun = "enrichGO", OrgDb = org.At.ta
 
 clusterProfiler::dotplot(ck, x = ~Cluster)
 ```
+
+
+# Meeting summary Antoine Sophie
+
+
+## Enquête sur la similarité entre cNF et CNF
+
+
+- Corrélations entre les réplicats à l'intérieur d'une condition et de l'autre sont faiblement supérieures à celles entre cNF et CNF (images investigations factorCO2)
+
+![Réseau CO2](Figures/correlations_cNF-CNF.png)
+
+
+- Quand on compare CNF à une condition x et cNF à cette même condition x (6 conditions possibles pour x), on retrouve entre 40 et 70\% de gènes en commun, suggérant toute fois des différences entre ces deux transcritômes (on aurait presque 100\% de similarité sinon)
+
+
+## Application des ces méthodes à la tomate
+
+- La tomate semble répondre différemment dans certaines mesures : plus d'effet du CO2, effet moindre du fer, effet nitrate plutôt similaire.
+
+
+- Ontologies moins fournies pour la tomate
+
+![Réseau CO2](Figures/DEgenesNumber.png)
+
+
+## Relevance network sur les gènes qui répondent globalement à un facteur
+
+- DEG en commun entre les 4 comparaisons possibles pour l'effet d'un facteur (Venn diagrams)
+
+
+- Fait sur l'ensemble des transcriptômes (plus large que les transcriptômes sur lesquels les DEG ont été détectés)
+
+
+- Relevance Network fait comme Rodrigo. et Al, seuil sur la valeur de corréation et sur la pvalue, gènes triés sur leur centralité et connectivité
+
+
+- Visualisés dans igraph après Clustering
+
+
+- Visualisés dans Cytoscape, pus clustering de communautés (pluggins) et analyse d'enrichissement d'ontologies
+
+![Réseau CO2](Figures/NetCO2.png)
+
+## Début de biblio sur les méthodes d'inférence de GRN
+
+- **Regression**: Transcription factors are selected by target gene specific sparse linear regression and data resampling approaches.
+
+- **Bayesian networks** optimize posterior probabilities by different heuristic searches.
+
+- **Correlation** Edges are ranked based on variants of correlation.
+
+- **Méthodes mixtes** Consensus entre différentes techniques (conclusion de la métanalyse et benchmarcks du projet DREAM5 (wisdom of crowds))
+
+Others : Genie3: A random forest, neural networks, chi 2
+- **Mutual Information**: Edges are (1) ranked based on variants of mutual information and (2) filtered for causal relationships.

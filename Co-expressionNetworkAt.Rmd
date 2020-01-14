@@ -27,7 +27,7 @@ opts_chunk$set(cache=FALSE,
                warning=FALSE,
                fig.align = "center")
 opts_knit$set(width=75)
-setwd("D:/These/CombinatoireRNASeqFeNCO2")
+#setwd("D:/These/CombinatoireRNASeqFeNCO2")
 library(gridExtra)
 library(reshape2)
 suppressMessages(library(gridExtra, warn.conflicts = F, quietly = T))
@@ -56,7 +56,7 @@ On labelle les conditions avec le code suivant : lettre majuscule pour le niveau
 
 ```{r data}
 #quantification file
-data <- read.csv("quantifFiles/QuantifGenesTomate.csv", h = T, sep = ',')
+data <- read.csv("quantifFiles/QuantifGenes.csv", h = T, sep = ',')
 rownames(data) <- data$Gene
 genes = which(!(grepl("__", rownames(data))))
 not_quant = data[which((grepl("__", rownames(data)))),]
@@ -150,8 +150,5 @@ plot(myPLNnetwork)
 myPLNnetwork$inception
 
 myPLNnetwork <- PLNnetwork(Abundance ~ 1, data = trichoptera)
-
-
 ```
-
 

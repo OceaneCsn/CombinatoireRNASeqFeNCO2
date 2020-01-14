@@ -130,7 +130,7 @@ heatmap(as.matrix(tcc$count[s,]), main = "Before normalisation")
 normalized.count <- getNormalizedData(tcc)
 heatmap(as.matrix(normalized.count[s,]), main = "After normalisation")
 
-save(normalized.count, file = "normalized.count_At.RData")
+save(normalized.count, file = "normalized.count_At2.RData")
 
 #DEtest
 tcc <- estimateDE(tcc, test.method = "edger", FDR = 0.01, design = model.matrix(~group))

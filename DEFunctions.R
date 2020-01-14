@@ -60,8 +60,8 @@ getExpression <- function(gene, conds = "all", specie = "At"){
   # Plots the expression levels of a given gene, using the normized.count data provoded.
   # conditions are all the columns of the data by default, or can be specified
   # biological replicated should be identified by _n
-  if(specie == "At") load("./normalized.count_At.RData")
-  if(specie == "Sl") load("./normalized.count_Sl.RData")
+  if(specie == "At") load("normalized.count_At.RData")
+  if(specie == "Sl") load("normalized.count_Sl.RData")
   if (length(conds) ==1){
     conds = colnames(normalized.count)
   }else{conds = grepl(conds[1], colnames(normalized.count)) | grepl(conds[2], colnames(normalized.count))}
