@@ -30,6 +30,7 @@ opts_knit$set(width=75)
 setwd("~/Documents/CombinatoireFeNCO2/Combinatoire/")
 library(gridExtra)
 library(reshape2)
+library(PLNmodels)
 suppressMessages(library(gridExtra, warn.conflicts = F, quietly = T))
 suppressMessages(library(stringr, warn.conflicts = F, quietly = T))
 suppressMessages(library(ggpubr, warn.conflicts = F, quietly = T))
@@ -143,35 +144,64 @@ Rank_stat <- rowMeans(cbind(rank(Node_nw_st[,1]), rank(Node_nw_st[,2])))
 Node_nw_st <- cbind(Node_nw_st, Rank_stat)
 write.table(Node_nw_st,file="StatsCO2.txt", sep="\t", col.names = NA, quote=F)
 ```
+## Réseau avec PLN Network
+
+```{r plnCO2}
+PLN_network <- function(data, DEGenes, plot_path=F){
+  # covariables
+  groups <- str_split_fixed(colnames(data), "_", 2)[,1]
+  co2 <- str_split_fixed(groups, "", 3)[,1]
+  nitrate <- factor(str_split_fixed(groups, "", 3)[,2])
+  nitrate <- relevel(nitrate, "N")
+  fer <- factor(str_split_fixed(groups, "", 3)[,3])
+  fer = relevel(fer, "F")
+  covariates <- data.frame(row.names =colnames(data), co2,nitrate, fer)
+  
+  # preparation des données
+  counts <- t(data[sharedBy3,])
+  plnData <- prepare_data(counts = counts, covariates = covariates)
+  network_models <- PLNnetwork(Abundance ~ nitrate + fer + co2 +offset(log(Offset)), data = plnData)
+  network_models
+  network_models$criteria %>% head() %>% knitr::kable()
+  plot(network_models, "diagnostic")
+  plot(network_models)
+  if(plot_path==T){
+    coefficient_path(network_models, corr = TRUE) %>% 
+      ggplot(aes(x = Penalty, y = Coeff, group = Edge, colour = Edge)) + 
+        geom_line(show.legend = FALSE) +  coord_trans(x="log10") + theme_bw()
+  }
+  
+  model_StARS <- getBestModel(network_models, "StARS")
+  
+  net <- plot(model_StARS)
+  plot.igraph(net)
+  plot.igraph(net, vertex.size = 10, vertex.label.cex = 0.5) 
+  plot(model_StARS, type = "support", output = "corrplot")
+  
+  # Verification des predictions du modele
+  data.frame(
+    fitted   = as.vector(fitted(model_StARS)),
+    observed = as.vector(counts)
+  ) %>% 
+    ggplot(aes(x = observed, y = fitted)) + 
+      geom_point(size = .5, alpha =.25 ) + 
+      scale_x_log10() + 
+      scale_y_log10() + 
+      theme_bw() + annotation_logticks()
+  return(net)
+}
+
+net <- PLN_network(data = data, DEGenes = sharedBy3)
+plot.igraph(net, vertex.size = 5, vertex.label.cex = 0.3, color = clusteredGenes) 
+```
+
 
 # Nitrate
 
-```{r nitrate}
+## Clustering
+```{r nitrateClust}
 load("GenesNitrate_At.RData")
 clusteredGenes <- clustering(sharedBy3, data)
-ACP(normalized.count[sharedBy3,], clusteredGenes)
-
-log.data <- log2(normalized.count[sharedBy3,]+1)
-
-
-Norm.interest.corr<-corr.test(t(log.data), method="pearson", ci=F)
-Norm.interest.corr$p[lower.tri( Norm.interest.corr$p,diag=-TRUE)]=NA
-Pval.adj<- as.data.frame(as.table(Norm.interest.corr$p))
-Norm.interest.corr$r[lower.tri(Norm.interest.corr$r,diag=TRUE)]=NA
-Correlation<-  as.data.frame(as.table(Norm.interest.corr$r))
-Cor.table<- na.exclude(cbind( Correlation, Pval.adj))[,c(1,2,3,6)]
-colnames(Cor.table)<- c("gene1","gene2","cor","p.adj")
-Cor.table.filt<- Cor.table [(abs(Cor.table[,3])>0.9 & Cor.table[,4]<0.01 ),]
-
-g<-  graph.data.frame(  Cor.table.filt[,1:2],  directed=-FALSE)
-V(g)$color <- clusteredGenes[V(g)]
-degree<- degree(g)
-hist(degree, breaks = 30)
-betweenness<- betweenness(g)
-hist(betweenness)
-Node_nw_st<- data.frame( degree, betweenness)
-plot.igraph(g, vertex.size = 5, vertex.label.cex = 0.01, color = clusteredGenes) 
-
 
 a <- OntologyProfile(sharedBy3)
 a$cluster <- clusteredGenes[a$ensembl_gene_id]
@@ -190,12 +220,14 @@ ck <- compareCluster(geneCluster = entrezID, fun = "enrichGO", OrgDb = org.At.ta
 clusterProfiler::dotplot(ck, x = ~Cluster)
 ```
 
-# Iron
+## ACP
+```{r nitrateACP}
 
-```{r iron}
-load("GenesIron_At.RData")
-clusteredGenes <- clustering(sharedBy3, data)
 ACP(normalized.count[sharedBy3,], clusteredGenes)
+```
+
+## Relevance network
+```{r nitrateNet}
 
 log.data <- log2(normalized.count[sharedBy3,]+1)
 
@@ -217,7 +249,22 @@ betweenness<- betweenness(g)
 hist(betweenness)
 Node_nw_st<- data.frame( degree, betweenness)
 plot.igraph(g, vertex.size = 5, vertex.label.cex = 0.01, color = clusteredGenes) 
+```
 
+## PLN Ntework
+
+```{r nitratePLN}
+
+PLN_network(data = data, DEGenes = sharedBy3)
+```
+
+
+# Iron
+
+## Clustering
+```{r ironClust}
+load("GenesIron_At.RData")
+clusteredGenes <- clustering(sharedBy3, data)
 a <- OntologyProfile(sharedBy3)
 a$cluster <- clusteredGenes[a$ensembl_gene_id]
 
@@ -233,6 +280,45 @@ ck <- compareCluster(geneCluster = entrezID, fun = "enrichGO", OrgDb = org.At.ta
     pvalueCutoff = 0.01, qvalueCutoff = 0.05)
 
 clusterProfiler::dotplot(ck, x = ~Cluster)
+```
+
+## ACP
+```{r ironACP}
+
+ACP(normalized.count[sharedBy3,], clusteredGenes)
+```
+
+## Relevance network
+
+```{r ironNet}
+
+log.data <- log2(normalized.count[sharedBy3,]+1)
+
+
+Norm.interest.corr<-corr.test(t(log.data), method="pearson", ci=F)
+Norm.interest.corr$p[lower.tri( Norm.interest.corr$p,diag=-TRUE)]=NA
+Pval.adj<- as.data.frame(as.table(Norm.interest.corr$p))
+Norm.interest.corr$r[lower.tri(Norm.interest.corr$r,diag=TRUE)]=NA
+Correlation<-  as.data.frame(as.table(Norm.interest.corr$r))
+Cor.table<- na.exclude(cbind( Correlation, Pval.adj))[,c(1,2,3,6)]
+colnames(Cor.table)<- c("gene1","gene2","cor","p.adj")
+Cor.table.filt<- Cor.table [(abs(Cor.table[,3])>0.9 & Cor.table[,4]<0.01 ),]
+
+g<-  graph.data.frame(  Cor.table.filt[,1:2],  directed=-FALSE)
+V(g)$color <- clusteredGenes[V(g)]
+degree<- degree(g)
+hist(degree, breaks = 30)
+betweenness<- betweenness(g)
+hist(betweenness)
+Node_nw_st<- data.frame( degree, betweenness)
+plot.igraph(g, vertex.size = 5, vertex.label.cex = 0.01, color = clusteredGenes) 
+```
+
+## PLN Network
+
+
+```{r ironPLN}
+PLN_network(data = data, DEGenes = sharedBy3)
 ```
 
 

@@ -143,6 +143,9 @@ https://mia.toulouse.inra.fr/images/f/f5/NETBIO_ChiquetEtAl.pdf
 
 library(PLNmodels)
 library(corrplot)
+
+load("GenesCO2_At.RData")
+
 data(trichoptera)
 trichoptera <- prepare_data(trichoptera$Abundance, trichoptera$Covariate)
 myPLNnetwork <- PLNnetwork(Abundance ~ 1, data = trichoptera)
@@ -150,5 +153,12 @@ plot(myPLNnetwork)
 myPLNnetwork$inception
 
 myPLNnetwork <- PLNnetwork(Abundance ~ 1, data = trichoptera)
+
+trichoptera$Abundance
+trichoptera$Covariate
+prepare_data(counts = trichoptera$Abundance, covariates = trichoptera$Covariate)
+
+
+
 ```
 
