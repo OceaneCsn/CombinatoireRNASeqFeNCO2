@@ -222,7 +222,7 @@ plotDEGNumber <- function(){
   ggplot(df, aes(fill=reg, y=value, x=variable)) +
     geom_bar(position="stack", stat="identity", size=0.3, alpha=0.5, color = "black") + 
     ggtitle("CO2, Nitrate and Iron effet on gene regulation") +
-    xlab("") + ylab("Number of differentially expressed genes") + coord_flip() + facet_grid(~ Specie) 
+    xlab("") + ylab("Number of differentially expressed genes") + coord_flip() + facet_grid(~ factor + Specie) 
 }
 
 ######################## Poisson mixture model for gene clustering on expression

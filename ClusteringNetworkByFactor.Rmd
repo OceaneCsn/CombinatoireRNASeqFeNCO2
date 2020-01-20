@@ -177,7 +177,7 @@ plot.igraph(g, vertex.size = 5, vertex.label.cex = 0.3, color = clusteredGenes)
 
 ```{r plnCO2}
 
-net_norm <- PLN_network(data = normalized.count, DEGenes = sharedBy3)
+net_norm <- PLN_network(data = data, DEGenes = sharedBy3)
 
 V(net_norm)$color <- clusteredGenes[V(net_norm)]
 plot.igraph(net_norm, vertex.size = 10, vertex.label.cex = 0.5, edge.width = 0.5) 
@@ -228,8 +228,8 @@ fer <- factor(str_split_fixed(groups, "", 3)[,3])
 fer = relevel(fer, "F")
 covariates <- data.frame(row.names =colnames(data), co2,nitrate, fer)
 
-
-DEGenes <- sharedBy3
+sample_genes <- sample(sharedBy3, 400)
+DEGenes <- sample_genes
 # preparation des donnÃ©es
 counts <- round(t(data[DEGenes,]), 0)
 plnData <- prepare_data(counts = counts, covariates = covariates)
@@ -275,7 +275,6 @@ plot.igraph(g, vertex.size = 5, vertex.label.cex = 0.01, color = clusteredGenes)
 ## PLN Ntework
 
 ```{r nitratePLN}
-sample_genes <- sample(sharedBy3, 400)
 net <- PLN_network(data = data, DEGenes = sample_genes)
 
 V(net)$color <- clusteredGenes[V(net)]
@@ -307,7 +306,7 @@ clusteredGenes <- clustering(sharedBy3, data)
 # 
 # clusterProfiler::dotplot(ck, x = ~Cluster)
 
-
+sample_genes <- sample(sharedBy3, 400)
 
 groups <- str_split_fixed(colnames(data), "_", 2)[,1]
 co2 <- str_split_fixed(groups, "", 3)[,1]
@@ -318,7 +317,7 @@ fer = relevel(fer, "F")
 covariates <- data.frame(row.names =colnames(data), co2,nitrate, fer)
 
 
-DEGenes <- sharedBy3
+DEGenes <- sample_genes
 # preparation des donnÃ©es
 counts <- round(t(data[DEGenes,]), 0)
 plnData <- prepare_data(counts = counts, covariates = covariates)
@@ -350,8 +349,7 @@ ACP(normalized.count[sharedBy3,], clusteredGenes)
 ## Relevance network
 
 ```{r ironNet}
-sample_genes <- sample(sharedBy3, 400)
-log.data <- log2(normalized.count[sharedBy3,]+1)
+log.data <- log2(normalized.count[sample_genes,]+1)
 
 
 Norm.interest.corr<-corr.test(t(log.data), method="pearson", ci=F)
@@ -409,7 +407,7 @@ netStats(net)
 
 - Ontologies moins fournies pour la tomate
 
-![Réseau CO2](Figures/DEgenesNumber.png)
+![Réseau CO2](Figures/DEgenesNumber2.png)
 
 
 ## Relevance network sur les gènes qui répondent globalement à un facteur

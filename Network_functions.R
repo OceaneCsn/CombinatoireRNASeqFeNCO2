@@ -35,15 +35,15 @@ PLN_network <- function(data, DEGenes, plot_path=F){
   plot(model_StARS, type = "support", output = "corrplot")
   
   # Verification des predictions du modele
-  data.frame(
+  data <- data.frame(
     fitted   = as.vector(fitted(model_StARS)),
     observed = as.vector(counts)
-  ) %>% 
-    ggplot(aes(x = observed, y = fitted)) + 
-    geom_point(size = .5, alpha =.25 ) + 
-    scale_x_log10() + 
-    scale_y_log10() + 
-    theme_bw() + annotation_logticks()
+  ) 
+  print(ggplot(data, aes(x = observed, y = fitted)) + 
+  geom_point(size = .5, alpha =.25 ) + 
+  scale_x_log10() + 
+  scale_y_log10() + 
+  theme_bw() + annotation_logticks())
   return(net)
 }
 
