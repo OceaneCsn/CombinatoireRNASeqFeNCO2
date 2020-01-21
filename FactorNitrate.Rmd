@@ -43,6 +43,9 @@ suppressMessages(library(enrichplot, warn.conflicts = F, quietly = T))
 
 #self written functions for differential expression
 source("./DEFunctions.R")
+
+Path = "~/Documents/CombinatoireFeNCO2/DEG_Combinatoire/MicroTom/FactorNitrate/"
+
 ```
 
 
@@ -53,7 +56,7 @@ On labelle les conditions avec le code suivant : lettre majuscule pour le niveau
 
 ```{r data}
 #quantification file
-data <- read.csv("quantifFiles/QuantifGenes.csv", h = T, sep = ',')
+data <- read.csv("quantifFiles/QuantifGenesTomate.csv", h = T, sep = ',')
 rownames(data) <- data$Gene
 genes = which(!(grepl("__", rownames(data))))
 not_quant = data[which((grepl("__", rownames(data)))),]
@@ -70,7 +73,7 @@ colnames(data) <- sapply(colnames(data), getLabel)
 head(data)
 dim(data)
 
-specie = "At"
+specie = "Sl"
 #getExpression("AT1G01010")
 ```
 
@@ -87,8 +90,9 @@ labels <- c("cNF", "cnF")
 genes1 <- dualDE(data, labels, pval = 0.01, method=method)
 g[[paste(labels[1], labels[2])]] = as.vector(genes1)
 
-
-d <- clustering(genes1$gene_id, data)
+a <- OntologyProfile(genes1$gene_id, specie = specie)
+b <- writeGenes(export = Path, labels = labels, ont = a, DEresult = genes1)
+#d <- clustering(genes1$gene_id, data)
 ```
 
 # Fort CO2
@@ -97,6 +101,9 @@ d <- clustering(genes1$gene_id, data)
 labels <- c("CNF", "CnF")
 genes2 <- dualDE(data, labels, pval = 0.01)
 g[[paste(labels[1], labels[2])]] = genes2
+
+a <- OntologyProfile(genes2$gene_id, specie = specie)
+b <- writeGenes(export = Path, labels = labels, ont = a, DEresult = genes2)
 ```
 
 # Low iron
@@ -105,6 +112,9 @@ g[[paste(labels[1], labels[2])]] = genes2
 labels <- c("cNf", "cnf")
 genes3 <- dualDE(data, labels, pval = 0.01)
 g[[paste(labels[1], labels[2])]] = genes3
+
+a <- OntologyProfile(genes3$gene_id, specie = specie)
+b <- writeGenes(export = Path, labels = labels, ont = a, DEresult = genes3)
 ```
 
 # Low iron and high CO2
@@ -113,6 +123,9 @@ g[[paste(labels[1], labels[2])]] = genes3
 labels <- c("CNf", "Cnf")
 genes4 <- dualDE(data, labels, pval = 0.01)
 g[[paste(labels[1], labels[2])]] = genes4
+
+a <- OntologyProfile(genes4$gene_id, specie = specie)
+b <- writeGenes(export = Path, labels = labels, ont = a, DEresult = genes4)
 ```
 
 # Venn diagram
@@ -152,7 +165,7 @@ res <- melt(d)
 res$reg = rep(c("up", "down"), 4)
 
 genesNitrateAt <- res
-save(genesNitrateAt, file = "genesNitrateAt.RData")
+#save(genesNitrateAt, file = "genesNitrateAt.RData")
 
 ggplot(res, aes(fill=reg, y=value, x=variable)) + 
     geom_bar(position="stack", stat="identity", alpha=0.5, color = "black") +

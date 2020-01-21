@@ -17,7 +17,7 @@ suppressMessages(library(RColorBrewer, warn.conflicts = F, quietly = T))
 
 
 #shiny::runGitHub("TCC-GUI", "swsoyee", subdir = "TCC-GUI", launch.browser = TRUE)
-#GOMicroTom <- read.table("~/Documents/MicroTom/Shared_Genes_Solyc_Sly1.1.csv", sep = '\t', h = T)
+GOMicroTom <- read.table("~/Documents/MicroTom/Shared_Genes_Solyc_Sly1.1.csv", sep = '\t', h = T)
 mart = useMart(biomart="plants_mart",host="plants.ensembl.org", dataset = "athaliana_eg_gene")
 
 ########################################################## sample matching
@@ -111,9 +111,36 @@ OntologyProfile <- function(ids, specie="At"){
     ont <- ont[match(genes1$gene_id[which(genes1$gene_id %in% ont$Sly)], ont$Sly),]
     head(ont, )
     print(paste0(sum(!genes1$gene_id %in% GOMicroTom$Sly), "not in the Micro-Tom annotation..."))
+    ont$ensembl_gene_id <- ont$Sly
     return(ont)
   }
 }
+
+writeGenes <- function(export, labels, ont, DEresult){
+  #write.table(x = ont, file = export, quote = F, sep = '\t', row.names = F)
+  ont$lfc <- DEresult[match(ont$ensembl_gene_id,DEresult$gene_id),]$m.value
+  ont$adj.p.value <- DEresult[match(ont$ensembl_gene_id,DEresult$gene_id),]$q.value
+  ont <- ont[order(ont$adj.p.value),]
+  write.table(x = ont, file = paste0(export, translateToOSX(labels), '.txt'), quote = F, sep = '\t', row.names = F)
+  return(ont)
+}
+
+translateToOSX <- function(labels){
+  # Parce que ce concon de system de fichier n'est pas case sensitive
+  RES = ""
+  for (text in labels){
+    res = ""
+    if(grepl("c", text)){res = paste0(res, "AmbientCO2_")}
+    else{res = paste0(res, "ElevatedCO2_")}
+    if(grepl("N", text)){res = paste0(res, "HightNitrate_")}
+    else{res = paste0(res, "LowNitrate")}
+    if(grepl("f", text)){res = paste0(res, "FeStarvation")}
+    else{res = paste0(res, "Fe")}
+    RES = paste0(RES, res, '-')
+  }
+  return(substr(RES, 1, nchar(RES)-1))
+}
+
 
 ########################################################## sample matching
 
@@ -141,9 +168,7 @@ dualDE <- function(data, labels, pval=0.01, method="edger", flc_filter = 0, plot
   #DEtest
   tcc <- estimateDE(tcc, test.method = method, FDR = pval, design = model.matrix(~group))
   result <- getResult(tcc, sort = TRUE)
-  
-  
-  
+
   DEgenes <- subset(result,estimatedDEG==1 & abs(m.value) > flc_filter)
   DEgenes$upreg = ifelse(DEgenes$m.value > 0, 1, 0)
   print(paste(dim(DEgenes)[1], " genes DE"))

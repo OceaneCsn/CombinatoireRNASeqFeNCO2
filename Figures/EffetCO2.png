@@ -1,0 +1,391 @@
+---
+title: "Analyse phénotypique combinatoire : Fer, Azote et CO2"
+author: "Océane Cassan"
+date: "10/25/2019"
+output: 
+  rmdformats::material:
+    fig_width: 12
+    highlight: kate
+    includes:
+        after_body: footer.html
+---
+
+On cherche à étudier l'effet de trois facteurs sur le dosage de différents éléments dans les racines d'Arabidopsis.
+
+
+```{r knitr_init, echo=FALSE, cache=FALSE}
+library(knitr, warn.conflicts = F, quietly = T)
+library(rmdformats, warn.conflicts = F, quietly = T)
+
+## Global options
+options(max.print="75")
+opts_chunk$set(cache=FALSE,
+               prompt=FALSE,
+               tidy=TRUE,
+               comment=NA,
+               message=FALSE,
+               warning=FALSE,
+               fig.align = "center")
+opts_knit$set(width=75)
+setwd("~/Documents/PremièreCinétique/")
+suppressMessages(library(ggplot2))
+library(gridExtra)
+library(stringr)
+library(wesanderson)
+library(ggpubr)
+library(ggplot2)
+```
+
+# Contexte et visualisation
+
+On cherche à étudier l'effet de trois facteurs sur le dosage de différents éléments dans les racines d'Arabidopsis.
+Les facteurs et leurs niveaux sont : CO2 élevé ou ambiant, carence ou non de fer, et faible Nitrates ou non.
+On dispose d'une cinétique et d'une combinatoire. C'est la combinatoire qui est traitée ici, avec 3 ou 4 réplicats par combinaison possible de chaque facteur.
+
+
+Sur ces données, on se demande si la culture en hydroponie ne fausse pas trop le phénotype, expliquant le peu d'effet des facteurs. C'est pour celà qu'on refera probablement une cinétique et une combinatoire en janvier.
+
+
+On suspecte d'ailleurs que la carence en nitrates va rendre la plante encore plus sensible à l'élévation au CO2.
+
+
+Pour déterminer si ces 3 variables et leurs interactions ont un effet sur le dosage des différents éléments, on va utiliser un modèle linéaire et une anova par élément.
+
+On le fait séparément pour chaque élement car tous les éléments ne semblent pas avoir la même réponse aux facteurs du tout comme le montrent les figures suivantes :
+
+![Interactions triples pour la ratio azote/Carbone](./CombiNCratio.png)
+
+
+![Interactions triples pour chaque element](./CombinatoireElementsCO2-N-Fe.png)
+
+
+![Modèle d'ordre 1 pour le ratio N/C et test de wilcox associé](./PooledFactorsCombi.png)
+
+
+# Méthodes 
+
+- **Modèle linéaire** :
+
+Le modèle linéaire peut être vu comme la forme la plus simple d'apprentissage statistique, et le point de départ de nombreuses analyses. Elle permet de déterminer les variables influentes sur une variable réponse à étudier, la force de leur effet, si oui ou non on constate des interactions, ...
+
+On estime la variable réponse comme une combinason linéaire des variables, pondérées par un coefficient qui leur est attribué. 
+
+Le modèle linéaire construit dans notre cas est de la forme :
+
+$C_{element} = fx_{Fe}+ n.x_N+c.x_{CO2} + int_{N,Fe}x_{Fe}x_{N}+ int_{N,CO2}x_{N}x_{CO2}+int_{CO2,Fe}x_{Fe}x_{CO2} + int_{CO2,Fe, N}x_{Fe}x_{CO2}x_{N} + \epsilon$,
+
+avec $f, n, c, int_{N,Fe}, int_{N,CO2}, int_{CO2,Fe}, int_{CO2,Fe, N}$ les paramètres du modèle et $\epsilon$ l'erreur résiduelle entre prédictions du modèle et valeur réelle.
+Les $x_i$ sont des indicatrices de classes, qui valent 0 pour le modèle de référence et 1 pour la niveau élevé. Il s'agit des contrastes, qui peuvent être changés en donnant à la fonction une autre matrice de design.
+
+
+Les paramètres sont estimés par minimsation des moindres carrés (optimisation par rapport aux paramètres de la fonction d'erreur quadratique entre prédiction et valeur attendue).
+
+
+Une fois cela fait, on peut déterminer la pertinence et l'utilité de chacun des coefficients du modèle. On constriut donc un test par coefficient, dont l'hypothèse nulle est qu'il n'y a pas de corrélation entre la variable et la réponse (i.e le coefficient $\beta = 0$).
+
+
+La statistique de test est $T = \frac{\hat\beta}{std(\hat\beta)} \sim t(0, df = n - k)$.
+Elle suit une loi de **Student** centrée, dont le nombre de degrés de liberté vaut le nombre d'observations auquel on retranche le nombre de paramètres du modèle. Si la pvalue est inférieure au seuil, on conclue à l'effet de la variable.
+
+Dans le summary() d'un modèle linéaire de r, on retrouve toutes ces p-values.
+
+On retrouve aussi un test de Fischer global, qui indique si au moins un des coefficients est différent de 0. 
+
+
+- **ANOVA** : 
+
+Le principe est de déterminer la part de variabilité de la réponse expliquée par chaque variable.
+
+
+Pour chaque coefficient on compare la variance de la moyenne les prédictions entre le modèle à un coefficient, et le modèle nul. Ce ratio de variances doit suivre une loi de Fischer de degrés de liberté définis par ceux du numérateur et du dénominateur (n).
+
+
+Les résultats peuvent différer des pvalues des coefficients de régression car les variables ne sont pas tout à fait décorrellées, et certaines peuvent partager des parts de variabilité de la réponse.
+
+
+On peut aussi faire une anova de plusieurs modèles amboîtés pour déterminer si l'un apporte significativement de la prédictivité par rapport à l'autre. On compare alors leurs variances respectives, qui suivent également une loi de Fischer.
+
+
+```{r visu, echo=F}
+#données à filtrer
+data <- read.csv("CarboneAzote.csv", h = T, sep = ';', stringsAsFactors = F)
+data <- data[c("ID", "N.", "C.")]
+colnames(data) <- c("ID", "TauxAzote", "TauxCarbone")
+
+cinetique <- data[!grepl("co2", data$ID) & nchar(data$ID) > 0,]
+combi <- data[grepl("co2", data$ID) ,]
+
+#conversion de tous les temps en heure
+ExposureTimeInHour <- function(value){
+  #temps d'exposition au CO2 elevé, converti en heures
+  if(grepl("w", value)){
+    return(as.numeric(strsplit(value, "w")[1])*24*7)
+  }
+  if(grepl("d", value)){
+    return(as.numeric(strsplit(value, "d")[1])*24)
+  }
+  if(grepl("h", value)){
+    return(as.numeric(strsplit(value, "h")[1]))
+  }
+}
+cinetique$ExposureTime <- lapply(cinetique$ID, ExposureTimeInHour)
+
+#formatage de l'experience en combinatoire
+combi$CO2 <- str_split_fixed(combi$ID, ", ", 3)[,1]
+combi$Nitrates <- gsub(",", ".", gsub("\\.", "", str_split_fixed(combi$ID, ", ", 3)[,2]))
+combi$Fer <- str_split_fixed(combi$ID, ", ", 3)[,3]
+combi <- combi[!grepl("-", combi$TauxAzote),]
+combi$TauxAzote <- as.numeric(as.character(gsub(",", ".",combi$TauxAzote)))
+combi$TauxCarbone <- as.numeric(as.character(gsub(",", ".",combi$TauxCarbone)))
+
+combi$NCratio <- combi$TauxAzote/combi$TauxCarbone*1.0
+combi$allFactors <- interaction(combi$Fer, combi$CO2, combi$Nitrates)
+```
+
+# Example de modèle linéaire Ratio Carbone Azote détaillé
+
+Le modèle linéaire construit est de la forme $C_{element} = fx_{Fe}+ n.x_N+c.x_{CO2} + int_{N,Fe}x_{Fe}x_{N}+ int_{N,CO2}x_{N}x_{CO2}+int_{CO2,Fe}x_{Fe}x_{CO2} + int_{CO2,Fe, N}x_{Fe}x_{CO2}x_{N} + \epsilon$, avec $f, n, c, int_{N,Fe}, int_{N,CO2}, int_{CO2,Fe}, int_{CO2,Fe, N}$ les paramètres du modèle et $\epsilon$ l'erreur résiduelle.
+Les paramètres sont estimés par minimsation des moindres carrés (optimisation de la fonction d'erreur entre prédiction et valeur attendue).
+
+```{r lm}
+data <- data.frame(combi)
+co2 <- as.factor(data$CO2)
+fer <- as.factor(data$Fer)
+azote <- as.factor(data$Nitrates)
+y <- data$NCratio
+
+#visu du modèle exhaustif d'ordre 1
+#plot(y ~ co2 * fer * azote)
+
+#estimation du modèle
+lm <- lm(y ~ co2 * fer * azote)
+
+#matrice de design
+kable(head(model.matrix(lm), 20))
+
+#vérification des résidus
+#plot(lm)
+
+#résultats
+summary(lm)
+an <- anova(lm)
+```
+L'étude des résidus ne montre pas de tendance, ni de signes de variabilité non expliquée, le modèle semble correct.
+
+On peut étudier la significativité des coefficients de ce modèle. Tout d'abord, il ressort que la variable nitrate est très influente sur le ratio nitrate carbone (le contraire nous aurait fort étonné...).
+L'interaction CO2 et fer semble avoir été détectée, mais en limite de significativité. On s'interroge encore sir l'effet Fer et sur l'interaction fer azote.
+
+Les autres ne sont pas significatifs.
+
+L'anova est, elle, plus stringente et ne semble trouver que l'effet azote, voire l'interaction azote fer.
+On supprime donc certaines interactions et variables non utiles.
+
+```{r lm2}
+lm2 <- lm(y ~ co2 + fer + azote + fer * co2 + fer * azote)
+summary(lm2)
+anova(lm2)
+```
+
+Bon, voilà, seul le facteur nitrate semble important, avec éventuellement l'interaction fer CO2.
+
+On veut maintenant effectuer les mêmes analyses sur tous les éléments à disposition.
+
+# Modèles linéaires tous les éléments
+
+```{r lmEl}
+data <- read.csv("CinetiqueAnnotee.csv", h = T, sep = ';', stringsAsFactors = F)
+tail(data)
+data <- data[-nrow(data),] 
+elements <- unique(data$Element.Label)
+data$MasseParMS <- data$X.µg.élts..G.MS.
+data <- data[!grepl("Blank", data$Label), c("Tube", "Element.Label", "MasseParMS")]
+data$MasseParMS <- lapply(data$MasseParMS, function(x) as.numeric(gsub(",", ".", gsub("\\.", "", x))))
+
+#On enleve le potassium qui a plein de valeurs manquantes
+elements <- elements[-3]
+
+
+combi <- data[grepl("co2", data$Tube),]
+#formatage de l'experience en combinatoire
+combi$CO2 <- str_split_fixed(combi$Tube, ", ", 3)[,1]
+combi$Nitrates <- gsub(",", ".", gsub("\\.", "", str_split_fixed(combi$Tube, ", ", 3)[,2]))
+combi$Fer <- str_split_fixed(combi$Tube, ", ", 3)[,3]
+
+#initialisation du tableau des pvalues de l'anova avec celles du lm N/C
+results <- data.frame(matrix(ncol = length(lm$coefficients)-1, nrow = length(elements) + 1))
+names(results) <- names(lm$coefficients)[-1]
+rownames(results) <- c("N/C", elements)
+results["N/C",] <- an$`Pr(>F)`[-length(an$`Pr(>F)`)]
+
+#initialisation du tableau des pvalues des coefficients du lm avec celles du lm N/C
+pval <- data.frame(matrix(ncol = length(lm$coefficients)-1, nrow = length(elements) + 1))
+names(pval) <- names(lm$coefficients)[-1]
+rownames(pval) <- c("N/C", elements)
+pval["N/C",] <- summary(lm)$coefficients[,4][-1]
+
+#initialisation du tableau des valeurs de chaque coefficients
+coefs <- data.frame(matrix(ncol = length(lm$coefficients)-1, nrow = length(elements) + 1))
+names(coefs) <- names(lm$coefficients)[-1]
+rownames(coefs) <- c("N/C", elements)
+coefs["N/C",] <- as.vector(lm$coefficients)[-1]
+
+for(el in elements){
+  print(paste("--------------------", el,"--------------------" ))
+  data <- data.frame(combi[combi$Element.Label == el,])
+  co2 <- as.factor(data$CO2)
+  fer <- as.factor(data$Fer)
+  azote <- as.factor(data$Nitrates)
+  y <- unlist(data$MasseParMS)
+  lm <- lm(y ~ co2 * fer * azote)
+  print(summary(lm))
+  print(anova(lm))
+  an <- anova(lm)
+  results[el,] <- an$`Pr(>F)`[-length(an$`Pr(>F)`)]
+  pval[el,] <- summary(lm)$coefficients[,4][-1]
+  coefs[el,] <- as.vector(lm$coefficients)[-1]
+  print(paste("--------------------", " ","--------------------" ))
+}
+```
+
+
+# Visualisation des résultats
+
+On affiche, pour chaque élément et chaque variable, la p-value associée. Cette p-value teste l'effet de la variable, les p-values significatives montrent des variables informatives pour le dosage de l'élément correspondant.
+
+
+On montre ici les p-values obtenues lors de la régression du modèle linéaire (coefficient lié à la variable statistiquement différent de 0) et pendant l'anova (part de la variance liée à cette variable statistiquement significative)
+
+
+```{r res}
+
+library(reshape2)
+results <- data.frame(results)
+results$elements <- rownames(results)
+melted_res <- melt(results)
+
+pval <- data.frame(pval)
+pval$elements <- rownames(pval)
+melted_pval <- melt(pval)
+
+coefs$elements <- rownames(coefs)
+melted_coefs <- melt(coefs)
+
+base_size <- 9
+
+ggplot(melted_res, aes(variable, elements, fill= value)) + 
+  geom_tile() + ggtitle("Variable's P-Values depending on the elements - ANOVA") +
+  scale_fill_distiller(palette = "RdPu", name = "P-value") +
+  theme_grey(base_size = base_size)  + 
+  scale_x_discrete(expand = c(0, 0)) +
+  scale_y_discrete(expand = c(0, 0)) + 
+  theme(axis.text.x = element_text(size = base_size *  1.2, angle = 320,
+                                   hjust = 0, colour = "grey50"), plot.title = element_text( size = 14, face = "bold")) + geom_text(aes(label = round(value, 3)))
+
+melted_res$thr <- ifelse(melted_res$value < 0.05, melted_res$value, 1)
+melted_pval$thr <- ifelse(melted_pval$value < 0.05, melted_pval$value, 1)
+
+ggplot(melted_res, aes(variable, elements, fill= thr)) + 
+  geom_tile() + ggtitle("Variable's P-Values depending on the elements - ANOVA") +
+  scale_fill_distiller(palette = "RdPu", name = "P-value") +
+  theme_grey(base_size = base_size)  + 
+  scale_x_discrete(expand = c(0, 0)) +
+  scale_y_discrete(expand = c(0, 0)) + 
+  theme(axis.text.x = element_text(size = base_size *  1.2, angle = 320,
+                                   hjust = 0, colour = "grey50"), plot.title = element_text( size = 14, face = "bold")) + geom_text(aes(label = round(value, 3)))
+
+ggplot(melted_pval, aes(variable, elements, fill= value)) + 
+  geom_tile() + ggtitle("Variable's P-Values depending on the elements - Linear Model") +
+  scale_fill_distiller(palette = "Purples", name = "P-value") +
+  theme_grey(base_size = base_size)  + 
+  scale_x_discrete(expand = c(0, 0)) +
+  scale_y_discrete(expand = c(0, 0)) + 
+  theme(axis.text.x = element_text(size = base_size *  1.2, angle = 320,
+                                   hjust = 0, colour = "grey50"), plot.title = element_text( size = 14, face = "bold")) + geom_text(aes(label = round(value, 3)))
+
+ggplot(melted_pval, aes(variable, elements, fill= thr)) + 
+  geom_tile() + ggtitle("Variable's P-Values depending on the elements - Linear Model") +
+  scale_fill_distiller(palette = "Purples", name = "P-value") +
+  theme_grey(base_size = base_size)  + 
+  scale_x_discrete(expand = c(0, 0)) +
+  scale_y_discrete(expand = c(0, 0)) + 
+  theme(axis.text.x = element_text(size = base_size *  1.2, angle = 320,
+                                   hjust = 0, colour = "grey50"), plot.title = element_text( size = 14, face = "bold")) + geom_text(aes(label = round(value, 3)))
+
+for (el in c("N/C", elements)){
+  d <- melted_coefs[melted_coefs$elements == el,]
+  
+  
+  p <- ggplot(d[c("variable", "value")], aes(x=variable, y=value, fill = value)) +
+    geom_bar(stat = "identity") + geom_text(aes(label=round(value, 3)), vjust=1.6, color="white", size=3.5) +
+    ggtitle(paste("Variable's coefficients for",el," - Linear Model"))+ geom_text(aes(label=round(value, 3)), vjust=-1.6, color="white", size=3.5) +
+    theme(axis.text.x = element_text(size = base_size *  1.2, angle = 320,
+                                   hjust = 0, colour = "grey50"), plot.title = element_text( size = 14, face = "bold"))
+  print(p)
+  
+}
+```
+
+# ACP
+
+Suite à l'exposé de Ivan Baxter
+
+```{r lm2}
+suppressMessages(library(ade4, warn.conflicts = F, quietly = T))
+suppressMessages(library(adegraphics, warn.conflicts = F, quietly = T))
+combi <- na.omit(combi)
+
+num_combi = data.frame(combi)
+num_combi$Fer = ifelse(combi$Fer == "fe", 1, 0)
+num_combi$CO2 = ifelse(combi$CO2 == "eco2", 1, 0)
+num_combi$Nitrates = ifelse(combi$Nitrates == 10, 1, 0)
+
+#combi$MasseParMS = unlist(combi$MasseParMS)
+d <- num_combi[,c("MasseParMS", "Fer", "Nitrates", "CO2")]
+acp <- dudi.pca(na.omit(d), center = TRUE, scale = TRUE, scannf = FALSE, nf = 4)
+summary(acp)
+library("RColorBrewer")
+
+s.corcircle(acp$co, xax=1, yax=3, fullcircle = FALSE, pback.col = "lightgrey")
+
+adegraphics::s.class(acp$li, xax =  1, yax = 3, as.factor(combi$Element.Label), labels = as.character(levels(as.factor(combi$Element.Label))), col = brewer.pal(n = 7, name = "Paired"), chullSize = 1, ellipseSize = 0, plabels.cex = 0.7, pbackground.col = "grey85", main = "Clusters dans le plan principal")
+```
+
+## Vérification de l'effet en CO2 fort nitrate et fer (Contôles de la cinétique)
+
+```{r lm2}
+
+data <- read.csv("ContrôlesCinétiqueBassine2.csv",h=T,sep=";", stringsAsFactors = F)
+data$Carbone. <- as.numeric(gsub(",", ".", gsub("\\.", "", data$Carbone.)))
+data$Azote. <- as.numeric(gsub(",", ".", gsub("\\.", "", data$Azote.)))
+
+data$Nom <- str_split_fixed(data$Nom, "-", 2)[,1]
+
+c <- ggplot(data, aes(y = Carbone., x = factor(Nom), fill = Nom)) +
+    geom_boxplot() + scale_fill_brewer(palette="Set2") +
+    geom_jitter(width=0.1,alpha=0.2) +
+    ggtitle("Carbon rate") + labs(fill = "CO2") +
+    labs(x = "CO2", y = "Carbon percentage") +
+    theme(plot.title = element_text( size = 20, face = "bold")) + stat_compare_means(method = "wilcox.test", hide.ns = FALSE, label = "p.signif",
+                     symnum.args = list(cutpoints = c(0, 0.0001, 0.001, 0.01, 0.05, 1), symbols = c("wilcox test ****", " wilcox test ***", " wilcox test**", 
+                                                                                                    "wilcox test *", "wilcox test ns")))
+
+
+n <- ggplot(data, aes(y = Azote., x = factor(Nom), fill = Nom)) +
+    geom_boxplot() + scale_fill_brewer(palette="Set2") +
+    geom_jitter(width=0.1,alpha=0.2) + 
+    ggtitle("Nitrate rate") + labs(fill = "CO2") +
+    labs(x = "CO2", y = "Nitrate percentage") +
+    theme(plot.title = element_text( size = 20, face = "bold")) + stat_compare_means(method = "wilcox.test", hide.ns = FALSE, label = "p.signif",
+                     symnum.args = list(cutpoints = c(0, 0.0001, 0.001, 0.01, 0.05, 1), symbols = c("wilcox test ****", " wilcox test ***", " wilcox test**", 
+                                                                                                    "wilcox test *", "wilcox test ns")))
+
+nc <- ggplot(data, aes(y = Azote./Carbone., x = factor(Nom), fill = Nom)) +
+    geom_boxplot() + scale_fill_brewer(palette="Set2") +
+    geom_jitter(width=0.1,alpha=0.2) +
+    ggtitle("Nitrate/Carbon ratio") +
+    labs(x = "CO2", y = "Nitrate/Carbon ratio") + labs(fill = "CO2")
+    theme(plot.title = element_text( size = 20, face = "bold")) + stat_compare_means(method = "wilcox.test", hide.ns = FALSE, label = "p.signif",
+                     symnum.args = list(cutpoints = c(0, 0.0001, 0.001, 0.01, 0.05, 1), symbols = c("wilcox test ****", " wilcox test ***", " wilcox test**", 
+                                                                                                    "wilcox test *", "wilcox test ns")))
+grid.arrange(c, n, nc, nrow = 1)
+```
