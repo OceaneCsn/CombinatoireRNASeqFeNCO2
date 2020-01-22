@@ -186,6 +186,9 @@ Node_nw_st_pln <- netStats(net_norm)
 
 length(E(net_norm))
 length(E(g))
+
+net <- net_norm
+save(net, file = "CO2_igraph_network.RData")
 ```
 
 
@@ -280,7 +283,21 @@ net <- PLN_network(data = data, DEGenes = sample_genes)
 V(net)$color <- clusteredGenes[V(net)]
 #V(net)$size <- degree[V(net)]*0.1
 plot.igraph(net, vertex.size = 10, vertex.label.cex = 0.4, edge.width = 0.5) 
+
 netStats(net)
+
+save(net, file = "Nitrate_igraph_network.RData")
+
+
+library(GENIE3)
+TF <- read.table("TFs_PlnTFDB.txt", h=T, sep = '\t')
+TF$AGI <- str_split_fixed(TF$Protein.ID, '\\.', 2)[,1]
+
+
+genie(normalized.count, regressors = intersect(TF$AGI,sharedBy3), targets = sharedBy3)
+genie(normalized.count, regressors = TF$AGI, targets = sharedBy3)
+
+
 ```
 
 
