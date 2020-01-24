@@ -246,22 +246,24 @@ plotDEGNumber <- function(){
   
   ggplot(df, aes(fill=reg, y=value, x=variable)) +
     geom_bar(position="stack", stat="identity", size=0.3, alpha=0.5, color = "black") + 
-    ggtitle("CO2, Nitrate and Iron effet on gene regulation") +
-    xlab("") + ylab("Number of differentially expressed genes") + coord_flip() + facet_grid(~ factor + Specie) 
+    ggtitle("CO2, Nitrate and Iron effet on gene regulation") + scale_fill_discrete(name = "Regulation", labels = c("Down", "Up")) +
+    xlab("") + ylab("Number of differentially expressed genes") + coord_flip() + facet_grid(~ factor + Specie) +
+    theme(strip.text.x = element_text(size = 16), plot.title = element_text(size=22, face="bold"),
+          legend.title = element_text(size = 15, face="bold"), legend.text = element_text(size=15),
+          axis.text.y = element_text(size = 18, angle = 30), axis.text.x = element_text(size = 13, angle = 30),
+          axis.title=element_text(size=17))
 }
 
 ######################## Poisson mixture model for gene clustering on expression
 
-clustering <- function(DEgenes, data, conds="all", nb_clusters = 2:12){
-  if (length(conds) ==1){
-    conds = colnames(data)
-    groups <- str_split_fixed(conds, '_', 2)[,1]
-  }
+clustering <- function(DEgenes, data, nb_clusters = 2:12){
+
+  conds = colnames(data)
+  groups <- str_split_fixed(conds, '_', 2)[,1]
   dataC <- data[DEgenes,conds]
-  conds <- str_split_fixed(colnames(dataC), '_', 2)[,1]
   run_pois <- coseq(dataC, conds=groups, K=nb_clusters, model="Poisson",iter = 5, transformation = "none")
   print(coseq::plot(run_pois, conds = groups, collapse_reps="average", graphs = c("ICL", "boxplots", "profiles", "probapost_barplots")))
-  summary(run_pois)
+  print(summary(run_pois))
   clusters_per_genes <- coseq::clusters(run_pois)
   return(clusters_per_genes)
 }

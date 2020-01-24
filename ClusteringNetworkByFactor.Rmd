@@ -289,16 +289,15 @@ netStats(net)
 save(net, file = "Nitrate_igraph_network.RData")
 
 
-library(GENIE3)
-TF <- read.table("TFs_PlnTFDB.txt", h=T, sep = '\t')
-TF$AGI <- str_split_fixed(TF$Protein.ID, '\\.', 2)[,1]
 
-
-genie(normalized.count, regressors = intersect(TF$AGI,sharedBy3), targets = sharedBy3)
-genie(normalized.count, regressors = TF$AGI, targets = sharedBy3)
 
 
 ```
+
+GENIE3 decomposes the prediction of a regulatory network between p genes into p different regression problems. In each of the regression problems, the expression pattern of one of the genes (target gene) is predicted from the expression patterns of all the other genes (input genes), using tree-based ensemble methods Random Forests or Extra-Trees. The importance of an input gene in the prediction of the target gene expression pattern is taken as an indication of a putative regulatory link. Putative regulatory links are then aggregated over all genes to provide a ranking of interactions from which the whole network is reconstructed.
+
+
+dynGENIE3: dynamical GENIE3 for the inference of gene networks from time series expression data
 
 
 # Iron

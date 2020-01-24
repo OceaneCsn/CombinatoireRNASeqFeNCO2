@@ -55,7 +55,7 @@ On labelle les conditions avec le code suivant : lettre majuscule pour le niveau
 
 ```{r data}
 #quantification file
-data <- read.csv("quantifFiles/QuantifGenesTomate.csv", h = T, sep = ',')
+data <- read.csv("quantifFiles/QuantifGenes.csv", h = T, sep = ',')
 rownames(data) <- data$Gene
 genes = which(!(grepl("__", rownames(data))))
 not_quant = data[which((grepl("__", rownames(data)))),]
@@ -72,7 +72,7 @@ colnames(data) <- sapply(colnames(data), getLabel)
 head(data)
 dim(data)
 
-specie = "Sl"
+specie = "At"
 ```
 
 
@@ -176,7 +176,7 @@ res <- melt(d)
 res$reg = rep(c("up", "down"), 4)
 
 genesco2At <- res
-save(genesco2At, file = "genesco2At.RData")
+save(genesco2At, file = paste0("genesco2", specie, ".RData"))
 
 
 ggplot(res, aes(fill=reg, y=value, x=variable)) + 

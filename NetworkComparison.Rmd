@@ -1,0 +1,169 @@
+---
+title: "Analyse d'expression différentielle mutli-facteurs : Fer, Azote et CO2"
+subtitle: "Clustering et réseau pour les gènes répondant à chaque facteur"
+author: "Océane Cassan"
+date: "10/25/2019"
+output: 
+  rmdformats::material:
+    fig_width: 12
+    highlight: kate
+    includes:
+        after_body: footer.html
+---
+
+On cherche à étudier comparer des méthode d'inférence de réseaux (co-expression et régulation). 
+
+```{r knitr_init, echo=FALSE, cache=FALSE}
+library(knitr, warn.conflicts = F, quietly = T)
+library(rmdformats, warn.conflicts = F, quietly = T)
+
+## Global options
+options(max.print="75")
+opts_chunk$set(cache=FALSE,
+               prompt=FALSE,
+               tidy=TRUE,
+               comment=NA,
+               message=FALSE,
+               warning=FALSE,
+               fig.align = "center")
+opts_knit$set(width=75)
+#setwd("~/Documents/CombinatoireFeNCO2/Combinatoire/")
+setwd("./")
+library(reshape2)
+library(PLNmodels)
+library(corrplot)
+suppressMessages(library(gridExtra, warn.conflicts = F, quietly = T))
+suppressMessages(library(stringr, warn.conflicts = F, quietly = T))
+suppressMessages(library(ggpubr, warn.conflicts = F, quietly = T))
+suppressMessages(library(ggplot2, warn.conflicts = F, quietly = T))
+suppressMessages(library(ggpubr, warn.conflicts = F, quietly = T))
+suppressMessages(library(psych, warn.conflicts = F, quietly = T))
+suppressMessages(library(igraph, warn.conflicts = F, quietly = T))
+library(visNetwork)
+#self written functions for differential expression
+source("./DEFunctions.R")
+source("./Network_functions.R")
+specie = "At"
+```
+
+
+# Clustering coseq
+
+```{r cluster}
+load(paste0("./GenesCO2_",specie,".RData"))
+
+load("./normalized.count_At.RData")
+
+#quantification file
+data <- read.csv("quantifFiles/QuantifGenes.csv", h = T, sep = ',')
+rownames(data) <- data$Gene
+genes = which(!(grepl("__", rownames(data))))
+not_quant = data[which((grepl("__", rownames(data)))),]
+data = data[genes,grepl('R', colnames(data))]
+
+keep <- rowSums(data) >= 10
+data <- data[keep,]
+group <- sapply(colnames(data), getLabel, with.rep = F)
+colnames(data) <- sapply(colnames(data), getLabel)
+
+specie = "At"
+clusteredGenes <- clustering(sharedBy3, data)
+```
+
+Model-Based Clustering Using MPLN (Parallelized)
+Description
+Performs clustering using mixtures of multivariate Poisson-log normal (MPLN) distribution and model selection using AIC, AIC3, BIC and ICL. Since each component/cluster size (G) is independent from another, all Gs in the range to be tested have been parallelized to run on a seperate core using the parallel R package.
+
+
+
+# Visualisation en ACP
+
+## Classique
+
+```{r acp}
+
+ACP(normalized.count[sharedBy3,], clusteredGenes)
+
+```
+
+ ## PNLModels
+
+
+```{r acpPLN}
+
+
+groups <- str_split_fixed(colnames(data), "_", 2)[,1]
+co2 <- str_split_fixed(groups, "", 3)[,1]
+nitrate <- factor(str_split_fixed(groups, "", 3)[,2])
+nitrate <- relevel(nitrate, "N")
+fer <- factor(str_split_fixed(groups, "", 3)[,3])
+fer = relevel(fer, "F")
+covariates <- data.frame(row.names =colnames(data), co2,nitrate, fer)
+
+
+DEGenes <- sharedBy3
+# preparation des donnÃ©es
+counts <- round(t(data[DEGenes,]), 0)
+plnData <- prepare_data(counts = counts, covariates = covariates)
+
+
+PCA_models <- PLNPCA(
+  Abundance ~ 1 + nitrate + fer + co2 + offset(log(Offset)),
+  data  = plnData, 
+  ranks = 1:10
+); PCA_models;plot(PCA_models)
+myPCA_ICL <- getBestModel(PCA_models, "ICL") 
+plot(myPCA_ICL, ind_cols =groups, var_cols = factor(clusteredGenes[rownames(data[DEGenes,])]))
+
+gridExtra::grid.arrange(
+  plot(myPCA_ICL, ind_cols=groups, map = "individual", plot = FALSE),
+  plot(myPCA_ICL, var_cols = factor(clusteredGenes[rownames(data[DEGenes,])]), map = "variable", plot = FALSE),
+  ncol = 2
+)
+sigma(myPCA_ICL) %>% corrplot(is.corr = FALSE)
+```
+
+# Réseau 
+
+## Réseau avec PLN Network
+
+```{r plnCO2}
+net_norm <- PLN_network(data = data, DEGenes = sharedBy3)
+
+V(net_norm)$color <- clusteredGenes[V(net_norm)]
+plot.igraph(net_norm, vertex.size = 10, vertex.label.cex = 0.5, edge.width = 0.5) 
+length(E(net_norm))
+
+data <- toVisNetworkData(net_norm)
+visNetwork(nodes = data$nodes, edges = data$edges, height = "500px", width = "100%") %>%
+  visEdges(smooth = FALSE) %>% visPhysics(solver = "forceAtlas2Based", timestep = 1, minVelocity=10, maxVelocity = 10, stabilization = F)
+
+```
+
+## GENEI3
+
+
+Faut-il normaliser les données avant geneie? (pris en compte dans PLN)
+```{r genie}
+
+library(GENIE3)
+TF <- read.table("TFs_PlnTFDB.txt", h=T, sep = '\t')
+TF$AGI <- str_split_fixed(TF$Protein.ID, '\\.', 2)[,1]
+
+
+for(thr in seq(0.05,0.39, by = 0.05)){
+  print(thr)
+  genie(normalized.count, regressors = intersect(TF$AGI,sharedBy3), targets = sharedBy3, thr = thr)
+}
+
+net <- genie(normalized.count, regressors = intersect(TF$AGI,sharedBy3), targets = sharedBy3, thr = 0.25)
+data <- toVisNetworkData(net)
+visNetwork(nodes = data$nodes, edges = data$edges, height = "500px", width = "100%") %>%
+  visEdges(smooth = FALSE) %>% visPhysics(solver = "forceAtlas2Based", timestep = 1, minVelocity=10, maxVelocity = 10, stabilization = F)
+
+V(net)$color <- clusteredGenes[V(net)]
+data <- toVisNetworkData(net)
+visNetwork(nodes = data$nodes, edges = data$edges, height = "500px", width = "100%") %>%
+  visEdges(smooth = FALSE) %>% visPhysics(solver = "forceAtlas2Based", timestep = 1, minVelocity=10, maxVelocity = 10, stabilization = F)
+
+```

@@ -29,7 +29,7 @@ PLN_network <- function(data, DEGenes, plot_path=F){
   }
   
   model_StARS <- getBestModel(network_models, "StARS")
-  
+  print(model_StARS)
   net <- plot(model_StARS)
   plot.igraph(net)
   #plot.igraph(net, vertex.size = 10, vertex.label.cex = 0.5) 
@@ -46,16 +46,19 @@ PLN_network <- function(data, DEGenes, plot_path=F){
   scale_y_log10() + 
   theme_bw() + annotation_logticks())
   return(net)
+  
+  netStats(g)
 }
 
-genie <- function(data, regressors=NA, targets=NA, nTrees=1000, nCores=5){
+genie <- function(data, regressors=NA, targets=NA, nTrees=1000, nCores=5, thr = 0.3){
   mat <- GENIE3(data, regulators = intersect(rownames(data),regressors), targets = targets ,treeMethod = "RF", K = "sqrt", nTrees = nTrees, nCores = nCores,verbose = T)
   hist(mat)
-  links <- getLinkList(mat, thr = quantile(mat, 0.999))
+  links <- getLinkList(mat, thr = thr)
   g <- graph.data.frame(links, directed = F)
   V(g)$color <- ifelse(V(g)$name %in% regressors, 1, 0)
-  plot.igraph(g, vertex.size=5, vertex.label.cex=0.1, color = V(g)$is.TF)
+  plot.igraph(g, vertex.size=5, vertex.label.cex=0.1, color = V(g)$color)
   netStats(g)
+  return(g)
 }
 
 
