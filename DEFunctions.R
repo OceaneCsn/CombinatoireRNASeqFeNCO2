@@ -17,7 +17,7 @@ suppressMessages(library(RColorBrewer, warn.conflicts = F, quietly = T))
 
 
 #shiny::runGitHub("TCC-GUI", "swsoyee", subdir = "TCC-GUI", launch.browser = TRUE)
-GOMicroTom <- read.table("~/Documents/MicroTom/Shared_Genes_Solyc_Sly1.1.csv", sep = '\t', h = T)
+#GOMicroTom <- read.table("~/Documents/MicroTom/Shared_Genes_Solyc_Sly1.1.csv", sep = '\t', h = T)
 mart = useMart(biomart="plants_mart",host="plants.ensembl.org", dataset = "athaliana_eg_gene")
 
 ########################################################## sample matching
@@ -81,7 +81,7 @@ getExpression <- function(gene, conds = "all", specie = "At"){
 
 ########################################################## Ontology
 
-OntologyProfile <- function(ids, specie="At"){
+OntologyProfile <- function(ids, specie="At", plot = T){
   #Plot ontology enrichment stats of a given a set of entrezgene IDs
   # only for Arabidopsis
   if(specie == "At"){
@@ -90,20 +90,22 @@ OntologyProfile <- function(ids, specie="At"){
     results <- results[!rownames(results) %in% which(duplicated(results$ensembl_gene_id)), ]
     kable(results)
     
-    ego <- enrichGO(gene = results$entrezgene_id,
-                    OrgDb = org.At.tair.db,
-                    ont = "BP",
-                    pAdjustMethod = "BH",
-                    pvalueCutoff  = 0.01,
-                    qvalueCutoff  = 0.05,
-                    readable = TRUE)
-    
-    #simpOnt <- simplify(ego)
-    # , cutoff=0.7, by="p.adjust", select_fun=min
-    #simpOnt@result$Description
-    print(barplot(ego, showCategory = 40, font.size = 5))
-    #print(dotplot(ego, showCategory = 40, font.size = 5))
-    print(emapplot(ego, layout = "kk"))
+    if(plot==T){
+      ego <- enrichGO(gene = results$entrezgene_id,
+                      OrgDb = org.At.tair.db,
+                      ont = "BP",
+                      pAdjustMethod = "BH",
+                      pvalueCutoff  = 0.01,
+                      qvalueCutoff  = 0.05,
+                      readable = TRUE)
+      
+      #simpOnt <- simplify(ego)
+      # , cutoff=0.7, by="p.adjust", select_fun=min
+      #simpOnt@result$Description
+      print(barplot(ego, showCategory = 40, font.size = 5))
+      #print(dotplot(ego, showCategory = 40, font.size = 5))
+      print(emapplot(ego, layout = "kk"))
+    }
     return(results)
   }
   if(specie=="Sl"){

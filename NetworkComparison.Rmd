@@ -9,6 +9,8 @@ output:
     highlight: kate
     includes:
         after_body: footer.html
+runtime: shiny
+
 ---
 
 On cherche à étudier comparer des méthode d'inférence de réseaux (co-expression et régulation). 
@@ -91,7 +93,6 @@ ACP(normalized.count[sharedBy3,], clusteredGenes)
 
 ```{r acpPLN}
 
-
 groups <- str_split_fixed(colnames(data), "_", 2)[,1]
 co2 <- str_split_fixed(groups, "", 3)[,1]
 nitrate <- factor(str_split_fixed(groups, "", 3)[,2])
@@ -123,11 +124,16 @@ gridExtra::grid.arrange(
 sigma(myPCA_ICL) %>% corrplot(is.corr = FALSE)
 ```
 
-# Réseau 
 
-## Réseau avec PLN Network
+
+# PLN Network : co-expression network
 
 ```{r plnCO2}
+
+TF <- read.table("TFs_PlnTFDB.txt", h=T, sep = '\t')
+TF$AGI <- str_split_fixed(TF$Protein.ID, '\\.', 2)[,1]
+
+
 net_norm <- PLN_network(data = data, DEGenes = sharedBy3)
 
 V(net_norm)$color <- clusteredGenes[V(net_norm)]
@@ -135,20 +141,47 @@ plot.igraph(net_norm, vertex.size = 10, vertex.label.cex = 0.5, edge.width = 0.5
 length(E(net_norm))
 
 data <- toVisNetworkData(net_norm)
+data$nodes$size = 10
+data$nodes$font.size = 10
 visNetwork(nodes = data$nodes, edges = data$edges, height = "500px", width = "100%") %>%
-  visEdges(smooth = FALSE) %>% visPhysics(solver = "forceAtlas2Based", timestep = 1, minVelocity=10, maxVelocity = 10, stabilization = F)
+  visEdges(smooth = FALSE) %>% visPhysics(solver = "forceAtlas2Based", timestep = 1, minVelocity=10, maxVelocity = 10, stabilization = F)%>%
+  visOptions(selectedBy = "group", 
+             highlightNearest = TRUE, 
+             nodesIdSelection = TRUE)
+
+data$nodes$group <- ifelse(data$nodes$id %in% TF$AGI, 1, 0)
+visNetwork(nodes = data$nodes, edges = data$edges, height = "500px", width = "100%") %>%
+  visEdges(smooth = FALSE) %>% visPhysics(solver = "forceAtlas2Based", timestep = 1, minVelocity=10, maxVelocity = 10, stabilization = F) %>%
+  visOptions(selectedBy = "group", 
+             highlightNearest = TRUE, 
+             nodesIdSelection = TRUE)
+
 
 ```
 
-## GENEI3
+# GENEI3 : regulation network
+
+### Méthode 
+
+**Method : **
+The identification of the regulatory genes for a given target gene is defined as determining the subset of genes whose expression directly influences or is predictive of the expression of the target gene. Within the framework of supervised learning, this problem is equivalent to a feature selection problem. In this context, our solution will exploit the embedded feature ranking mechanism of tree-based ensemble methods.
+
+**Feature importance :** We consider a measure which at each test node computes the total reduction of the variance of the output variable due to the split, and then average it for all trees. (equivament to oob, but less computationnally expensive)
 
 
-Faut-il normaliser les données avant geneie? (pris en compte dans PLN)
+**Thresholding :** 
+A practical network prediction is then obtained by setting a threshold on this ranking. In this paper, we focus only on the first task [...]. The question of the choice of an optimal confidence threshold, although important, will be left open.
+
+
+**Normalisation :** To avoid biases, we have first normalized the gene expressions so that they all have a unit variance in the training set, before applying the tree-based ensemble methods. This normalization indeed implies that the different weights inferred from different models predicting the different gene expressions are comparable.
+
+https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0012776
+
+
 ```{r genie}
 
 library(GENIE3)
-TF <- read.table("TFs_PlnTFDB.txt", h=T, sep = '\t')
-TF$AGI <- str_split_fixed(TF$Protein.ID, '\\.', 2)[,1]
+
 
 
 for(thr in seq(0.05,0.39, by = 0.05)){
@@ -158,12 +191,27 @@ for(thr in seq(0.05,0.39, by = 0.05)){
 
 net <- genie(normalized.count, regressors = intersect(TF$AGI,sharedBy3), targets = sharedBy3, thr = 0.25)
 data <- toVisNetworkData(net)
+
+
+ont <- OntologyProfile(V(net)$name, plot=F)
+data$nodes$Ontology <- ont[match(ont$ensembl_gene_id, data$nodes$id),]$external_gene_name
+data$nodes$description <-ont[match(ont$ensembl_gene_id, data$nodes$id),]$description
+
 visNetwork(nodes = data$nodes, edges = data$edges, height = "500px", width = "100%") %>%
-  visEdges(smooth = FALSE) %>% visPhysics(solver = "forceAtlas2Based", timestep = 1, minVelocity=10, maxVelocity = 10, stabilization = F)
+  visEdges(smooth = FALSE) %>% visPhysics(solver = "forceAtlas2Based", timestep = 1, minVelocity=10, maxVelocity = 10, stabilization = F)%>%
+  visOptions(selectedBy = c("Ontology"), 
+             highlightNearest = TRUE, 
+             nodesIdSelection = TRUE)
 
 V(net)$color <- clusteredGenes[V(net)]
 data <- toVisNetworkData(net)
+
+save(data, file = "./DataNetworkGenieCO2Clusters.RData")
+
 visNetwork(nodes = data$nodes, edges = data$edges, height = "500px", width = "100%") %>%
-  visEdges(smooth = FALSE) %>% visPhysics(solver = "forceAtlas2Based", timestep = 1, minVelocity=10, maxVelocity = 10, stabilization = F)
+  visEdges(smooth = FALSE) %>% visPhysics(solver = "forceAtlas2Based", timestep = 1, minVelocity=10, maxVelocity = 10, stabilization = F)%>%
+  visOptions(selectedBy = "group", 
+             highlightNearest = TRUE, 
+             nodesIdSelection = TRUE, collapse = TRUE)
 
 ```
