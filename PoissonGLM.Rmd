@@ -1,0 +1,159 @@
+---
+title: "Poisson log normal"
+author: "Océane"
+date: "1/23/2020"
+output: 
+  rmdformats::material:
+    fig_width: 12
+    highlight: kate
+    includes:
+        after_body: footer.html
+---
+
+```{r setup, include=FALSE}
+library(knitr, warn.conflicts = F, quietly = T)
+library(rmdformats, warn.conflicts = F, quietly = T)
+
+## Global options
+options(max.print="75")
+opts_chunk$set(cache=FALSE,
+               prompt=FALSE,
+               tidy=TRUE,
+               comment=NA,
+               message=FALSE,
+               warning=FALSE,
+               fig.align = "center")
+opts_knit$set(width=75)
+#setwd("~/Documents/CombinatoireFeNCO2/Combinatoire/")
+library(gridExtra)
+library(reshape2)
+suppressMessages(library(gridExtra, warn.conflicts = F, quietly = T))
+suppressMessages(library(stringr, warn.conflicts = F, quietly = T))
+suppressMessages(library(ggpubr, warn.conflicts = F, quietly = T))
+suppressMessages(library(ggplot2, warn.conflicts = F, quietly = T))
+
+
+#self written functions for differential expression
+setwd("./")
+```
+
+
+
+# Modèle linéaire généralisé : théorie
+
+GLM en deux parties : 
+
+**Partie déterministe**: modélisation de l’espérance des observations conditionnellement aux variables explicatives 
+
+**Partie aléatoire**: modélisation de la variabilité des observations conditionnellement aux variables explicatives 
+
+
+Nous souhaitons modéliser l'expression des gènes (données de comptage normalisées) de 8 conditions (24 transcriptomes) à l'aide d'une loi de Poisson.
+
+Ici, de log de l'espérance des données de compatge est estimé par une combinason linéaire des variables prédictives (qualitatives ici) : CO2 élevé ou non, bas nitrate ou fort nitrate, carence en fer ou non. Nous prenons comme individus l'ensemble des gènes différentiellement exprimés dans au moins d'une des analyses DE sur les 12 réalisées au prélable.
+
+L'objectif est de voir si des coefficients propores aux facteurs ou leurs interactions sont significatifs, renseignant sur un effet global de ces facteurs sur les gènes DE.
+
+# Implémentation et résultats
+
+## Sur l'ensemble des gènes
+
+On utilise le même gene pour faire plusieurs predictions (24 fois pas gene, car une fois dans chaque transcriptome disponible), dans des conditions diffrentes, cele ne nuit t il pas à l'hypothèse d'indépendance des individus?
+
+```{r all}
+load("./normalized.count_At.RData")
+load("./DEgenesAllAt.RData")
+
+glmData <- melt(round(normalized.count[DEgenes,], 0))
+colnames(glmData) <- c("gene", "Condition", "Counts")
+
+groups <- str_split_fixed(glmData$Condition, "_", 2)[,1]
+glmData$Co2 <- str_split_fixed(groups, "", 3)[,1]
+glmData$nitrate <- str_split_fixed(groups, "", 3)[,2]
+glmData$fer <- str_split_fixed(groups, "", 3)[,3]
+
+
+glmData$Co2 <- ifelse(glmData$Co2 == "c", 0, 1)
+glmData$nitrate <- ifelse(glmData$nitrate == "N", 0, 1)
+glmData$fer <- ifelse(glmData$fer == "F", 0, 1)
+glmData <- glmData[c("Counts", "Co2", "nitrate", "fer")]
+
+head(glmData)
+
+ggplot(data = glmData, aes(x=interaction(Co2, nitrate, fer), y = log(Counts), color = interaction(Co2, nitrate, fer))) + geom_boxplot(alpha = 0.4)
+
+glm <- glm(Counts ~ 1 + as.factor(Co2) * as.factor(nitrate) * as.factor(fer), family = poisson(link="log"), data = glmData)
+
+anova(glm)
+summary(glm)
+```
+
+
+On a ici une significativité de tous les coefficients.
+Ne serait-ce pas du au très grand nombre d'observations, qui rend tous les tests significatifs?
+
+On va randomiser une variable (ici le nitrate), et voir si elle est toujours détectée comme significative.
+
+```{r rand}
+glmDataTest <- glmData
+glmDataTest$nitrate <- sample(glmData$nitrate, replace = F)
+
+glmTest <- glm(Counts ~ 1 + as.factor(Co2) * as.factor(nitrate) * as.factor(fer), family = poisson(link="log"), data = glmDataTest)
+
+summary(glmTest)
+```
+
+Elle l'est. (Ligne de l'effet nitrate toujours ***).
+
+Je ne sais pas comment corriger ça, à part essayer d'enlever des observations, et ne pas dupliquer les gènes par example. On tente ça : 
+
+```{r reduction}
+
+glmData <- melt(round(normalized.count[DEgenes,], 0))
+glmData <- glmData[sample(rownames(glmData)),]
+colnames(glmData) <- c("gene", "Condition", "Counts")
+glmData <- glmData[!duplicated(glmData$gene),]
+summary(glmData$Condition)
+
+groups <- str_split_fixed(glmData$Condition, "_", 2)[,1]
+glmData$Co2 <- str_split_fixed(groups, "", 3)[,1]
+glmData$nitrate <- str_split_fixed(groups, "", 3)[,2]
+glmData$fer <- str_split_fixed(groups, "", 3)[,3]
+
+
+glmData$Co2 <- ifelse(glmData$Co2 == "c", 0, 1)
+glmData$nitrate <- ifelse(glmData$nitrate == "N", 0, 1)
+glmData$fer <- ifelse(glmData$fer == "F", 0, 1)
+glmData <- glmData[c("Counts", "Co2", "nitrate", "fer")]
+
+head(glmData)
+
+
+glm <- glm(Counts ~ 1 + as.factor(Co2) * as.factor(nitrate) * as.factor(fer), family = poisson(link="log"), data = glmData)
+summary(glm)
+```
+C'est pareil.
+On essaie avec encore moins de gènes: 
+```{r reduction2}
+
+glmData <- glmData[sample(rownames(glmData), size=1000, replace = F),]
+glm <- glm(Counts ~ 1 + as.factor(Co2) * as.factor(nitrate) * as.factor(fer), family = poisson(link="log"), data = glmData)
+summary(glm)
+
+
+glmDataTest <- glmData
+
+glmDataTest$nitrate <- sample(glmDataTest$nitrate, replace = F)
+glmTest <- glm(Counts ~ 1 + as.factor(Co2) * as.factor(nitrate) * as.factor(fer), family = poisson(link="log"), data = glmDataTest)
+
+summary(glmTest)
+
+glmData <- glmData[sample(rownames(glmData), size=100, replace = F),]
+glm <- glm(Counts ~ 1 + as.factor(Co2) * as.factor(nitrate) * as.factor(fer), family = poisson(link="log"), data = glmData)
+summary(glm)
+```
+
+## Sur les gènes répondant plus à un facteur
+
+
+## Sur des clusters de gènes
