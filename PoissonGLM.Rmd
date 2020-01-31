@@ -25,8 +25,7 @@ opts_chunk$set(cache=FALSE,
                fig.align = "center")
 opts_knit$set(width=75)
 #setwd("~/Documents/CombinatoireFeNCO2/Combinatoire/")
-library(gridExtra)
-library(reshape2)
+
 suppressMessages(library(gridExtra, warn.conflicts = F, quietly = T))
 suppressMessages(library(stringr, warn.conflicts = F, quietly = T))
 suppressMessages(library(ggpubr, warn.conflicts = F, quietly = T))
@@ -76,15 +75,15 @@ glmData$fer <- str_split_fixed(groups, "", 3)[,3]
 glmData$Co2 <- ifelse(glmData$Co2 == "c", 0, 1)
 glmData$nitrate <- ifelse(glmData$nitrate == "N", 0, 1)
 glmData$fer <- ifelse(glmData$fer == "F", 0, 1)
-glmData <- glmData[c("Counts", "Co2", "nitrate", "fer")]
+glmData <- glmData[c("Counts", "Co2", "nitrate", "fer", "gene")]
 
 head(glmData)
 
 ggplot(data = glmData, aes(x=interaction(Co2, nitrate, fer), y = log(Counts), color = interaction(Co2, nitrate, fer))) + geom_boxplot(alpha = 0.4)
 
-glm <- glm(Counts ~ 1 + as.factor(Co2) * as.factor(nitrate) * as.factor(fer), family = poisson(link="log"), data = glmData)
 
-anova(glm)
+print(dim(glmData))
+glm <- glm(Counts ~ 1 + as.factor(Co2) * as.factor(nitrate) * as.factor(fer), family = poisson(link="log"), data = glmData)
 summary(glm)
 ```
 
@@ -99,11 +98,10 @@ glmDataTest <- glmData
 glmDataTest$nitrate <- sample(glmData$nitrate, replace = F)
 
 glmTest <- glm(Counts ~ 1 + as.factor(Co2) * as.factor(nitrate) * as.factor(fer), family = poisson(link="log"), data = glmDataTest)
-
 summary(glmTest)
 ```
 
-Elle l'est. (Ligne de l'effet nitrate toujours ***).
+Elle l'est. (Ligne de l'effet nitrate toujours ***). 
 
 Je ne sais pas comment corriger ça, à part essayer d'enlever des observations, et ne pas dupliquer les gènes par example. On tente ça : 
 
@@ -113,6 +111,7 @@ glmData <- melt(round(normalized.count[DEgenes,], 0))
 glmData <- glmData[sample(rownames(glmData)),]
 colnames(glmData) <- c("gene", "Condition", "Counts")
 glmData <- glmData[!duplicated(glmData$gene),]
+# On verifie que toutes les conditions soient bien représentées après le nouvel échantillonnage
 summary(glmData$Condition)
 
 groups <- str_split_fixed(glmData$Condition, "_", 2)[,1]
@@ -127,13 +126,15 @@ glmData$fer <- ifelse(glmData$fer == "F", 0, 1)
 glmData <- glmData[c("Counts", "Co2", "nitrate", "fer")]
 
 head(glmData)
-
+print(dim(glmData))
 
 glm <- glm(Counts ~ 1 + as.factor(Co2) * as.factor(nitrate) * as.factor(fer), family = poisson(link="log"), data = glmData)
 summary(glm)
 ```
+
 C'est pareil.
-On essaie avec encore moins de gènes: 
+On essaie avec encore moins de gènes (1000 randomisé ou non, puis 100, randomisé ou non): 
+
 ```{r reduction2}
 
 glmData <- glmData[sample(rownames(glmData), size=1000, replace = F),]
@@ -151,9 +152,47 @@ summary(glmTest)
 glmData <- glmData[sample(rownames(glmData), size=100, replace = F),]
 glm <- glm(Counts ~ 1 + as.factor(Co2) * as.factor(nitrate) * as.factor(fer), family = poisson(link="log"), data = glmData)
 summary(glm)
+
+glmDataTest <- glmData
+
+glmDataTest$nitrate <- sample(glmDataTest$nitrate, replace = F)
+glmTest <- glm(Counts ~ 1 + as.factor(Co2) * as.factor(nitrate) * as.factor(fer), family = poisson(link="log"), data = glmDataTest)
+summary(glmTest)
 ```
 
 ## Sur les gènes répondant plus à un facteur
 
-
 ## Sur des clusters de gènes
+
+
+```{r all}
+load("./normalized.count_At.RData")
+load("./GenesCO2_At.RData")
+load("./DEgenesAllAt.RData")
+load("GenesCO2_clustered_coseq_At.RData")
+
+DE
+
+glmData <- melt(round(normalized.count[DEgenes,], 0))
+colnames(glmData) <- c("gene", "Condition", "Counts")
+
+groups <- str_split_fixed(glmData$Condition, "_", 2)[,1]
+glmData$Co2 <- str_split_fixed(groups, "", 3)[,1]
+glmData$nitrate <- str_split_fixed(groups, "", 3)[,2]
+glmData$fer <- str_split_fixed(groups, "", 3)[,3]
+
+
+glmData$Co2 <- ifelse(glmData$Co2 == "c", 0, 1)
+glmData$nitrate <- ifelse(glmData$nitrate == "N", 0, 1)
+glmData$fer <- ifelse(glmData$fer == "F", 0, 1)
+glmData <- glmData[c("Counts", "Co2", "nitrate", "fer", "gene")]
+
+head(glmData)
+
+ggplot(data = glmData, aes(x=interaction(Co2, nitrate, fer), y = log(Counts), color = interaction(Co2, nitrate, fer))) + geom_boxplot(alpha = 0.4)
+
+
+print(dim(glmData))
+glm <- glm(Counts ~ 1 + as.factor(Co2) * as.factor(nitrate) * as.factor(fer), family = poisson(link="log"), data = glmData)
+summary(glm)
+```

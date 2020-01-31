@@ -73,6 +73,8 @@ colnames(data) <- sapply(colnames(data), getLabel)
 specie = "At"
 clusteredGenes <- clustering(sharedBy3, data)
 
+
+
 a <- OntologyProfile(sharedBy3)
 a$cluster <- clusteredGenes[a$ensembl_gene_id]
 entrezID <- list()
