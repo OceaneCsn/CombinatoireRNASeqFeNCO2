@@ -30,7 +30,8 @@ suppressMessages(library(gridExtra, warn.conflicts = F, quietly = T))
 suppressMessages(library(stringr, warn.conflicts = F, quietly = T))
 suppressMessages(library(ggpubr, warn.conflicts = F, quietly = T))
 suppressMessages(library(ggplot2, warn.conflicts = F, quietly = T))
-
+suppressMessages(library(reshape2, warn.conflicts = F, quietly = T))
+require(lme4)
 
 #self written functions for differential expression
 setwd("./")
@@ -85,6 +86,9 @@ ggplot(data = glmData, aes(x=interaction(Co2, nitrate, fer), y = log(Counts), co
 print(dim(glmData))
 glm <- glm(Counts ~ 1 + as.factor(Co2) * as.factor(nitrate) * as.factor(fer), family = poisson(link="log"), data = glmData)
 summary(glm)
+
+mixGlm <- glmer(Counts ~  as.factor(Co2) * as.factor(nitrate) * as.factor(fer) + (1 | gene), data = glmData, family = poisson(link="log"))
+summary(mixGlm)
 ```
 
 
@@ -160,21 +164,27 @@ glmTest <- glm(Counts ~ 1 + as.factor(Co2) * as.factor(nitrate) * as.factor(fer)
 summary(glmTest)
 ```
 
-## Sur les gènes répondant plus à un facteur
 
 ## Sur des clusters de gènes
 
+# Sur les gènes répondant au CO2
 
-```{r all}
+Dans au moins 3 des 4 comparaisons possibles de transcriptomes avec changement de CO2
+
+# En prenant tous les gènes
+
+```{r co2}
 load("./normalized.count_At.RData")
 load("./GenesCO2_At.RData")
 load("./DEgenesAllAt.RData")
 load("GenesCO2_clustered_coseq_At.RData")
 
-DE
+DEgenes <- sharedBy3
 
 glmData <- melt(round(normalized.count[DEgenes,], 0))
 colnames(glmData) <- c("gene", "Condition", "Counts")
+glmData <- glmData[sample(rownames(glmData)),]
+#glmData <- glmData[!duplicated(glmData$gene),]
 
 groups <- str_split_fixed(glmData$Condition, "_", 2)[,1]
 glmData$Co2 <- str_split_fixed(groups, "", 3)[,1]
@@ -195,4 +205,8 @@ ggplot(data = glmData, aes(x=interaction(Co2, nitrate, fer), y = log(Counts), co
 print(dim(glmData))
 glm <- glm(Counts ~ 1 + as.factor(Co2) * as.factor(nitrate) * as.factor(fer), family = poisson(link="log"), data = glmData)
 summary(glm)
+
+
+mixGlm <- glmer(Counts ~  as.factor(Co2) * as.factor(nitrate) * as.factor(fer) + (1 | gene), data = glmData, family = poisson(link="log"))
+summary(mixGlm)
 ```
