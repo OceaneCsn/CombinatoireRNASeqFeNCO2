@@ -194,8 +194,8 @@ data <- toVisNetworkData(net)
 
 
 ont <- OntologyProfile(V(net)$name, plot=F)
-data$nodes$Ontology <- ont[match(ont$ensembl_gene_id, data$nodes$id),]$external_gene_name
-data$nodes$description <-ont[match(ont$ensembl_gene_id, data$nodes$id),]$description
+data$nodes$Ontology <- ont[match(data$nodes$id, ont$ensembl_gene_id),]$external_gene_name
+data$nodes$description <-ont[match(data$nodes$id, ont$ensembl_gene_id),]$description
 
 visNetwork(nodes = data$nodes, edges = data$edges, height = "500px", width = "100%") %>%
   visEdges(smooth = FALSE) %>% visPhysics(solver = "forceAtlas2Based", timestep = 1, minVelocity=10, maxVelocity = 10, stabilization = F)%>%
