@@ -130,8 +130,7 @@ sigma(myPCA_ICL) %>% corrplot(is.corr = FALSE)
 
 ```{r plnCO2}
 
-TF <- read.table("TFs_PlnTFDB.txt", h=T, sep = '\t')
-TF$AGI <- str_split_fixed(TF$Protein.ID, '\\.', 2)[,1]
+
 
 
 net_norm <- PLN_network(data = data, DEGenes = sharedBy3)
@@ -182,7 +181,8 @@ https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0012776
 
 library(GENIE3)
 
-
+TF <- read.table("TFs_PlnTFDB.txt", h=T, sep = '\t')
+TF$AGI <- str_split_fixed(TF$Protein.ID, '\\.', 2)[,1]
 
 for(thr in seq(0.05,0.39, by = 0.05)){
   print(thr)
@@ -190,6 +190,8 @@ for(thr in seq(0.05,0.39, by = 0.05)){
 }
 
 net <- genie(normalized.count, regressors = intersect(TF$AGI,sharedBy3), targets = sharedBy3, thr = 0.25)
+mat <- net[[2]]
+net <- net[[1]]
 data <- toVisNetworkData(net)
 
 

@@ -53,12 +53,13 @@ PLN_network <- function(data, DEGenes, plot_path=F){
 genie <- function(data, regressors=NA, targets=NA, nTrees=1000, nCores=5, thr = 0.3){
   mat <- GENIE3(data, regulators = intersect(rownames(data),regressors), targets = targets ,treeMethod = "RF", K = "sqrt", nTrees = nTrees, nCores = nCores,verbose = T)
   hist(mat)
+  kable(head(mat))
   links <- getLinkList(mat, thr = thr)
   g <- graph.data.frame(links, directed = F)
   V(g)$color <- ifelse(V(g)$name %in% regressors, 1, 0)
   plot.igraph(g, vertex.size=5, vertex.label.cex=0.1, color = V(g)$color)
   netStats(g)
-  return(g)
+  return(list(g,links))
 }
 
 

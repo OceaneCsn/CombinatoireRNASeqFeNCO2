@@ -1,0 +1,113 @@
+Include	Color	Pos	Name	Cp	Concentration	Standard	Status
+True	255	A1	Sample 1	18.07		0	
+True	65280	A2	Sample 2			0	
+True	255	A3	Sample 3	19.33		0	
+True	255	A4	Sample 4	19.11		0	
+True	65280	A5	Sample 5			0	
+True	65280	A6	Sample 6			0	
+True	255	A7	Sample 7	22.14		0	
+True	65280	A8	Sample 8			0	
+True	65280	A9	Sample 9			0	
+True	65280	A10	Sample 10			0	
+True	255	A11	Sample 11	19.13		0	
+True	255	A12	Sample 12	19.18		0	
+True	255	A13	Sample 13	37.00		0	> - Late Cp call (last five cycles) has higher uncertainty
+True	255	A14	Sample 14	35.48		0	
+True	255	A15	Sample 15	19.87		0	
+True	255	A16	Sample 16	20.59		0	
+True	255	B1	Sample 25	18.89		0	
+True	255	B2	Sample 26	18.97		0	
+True	255	B3	Sample 27	19.81		0	
+True	255	B4	Sample 28	19.88		0	
+True	255	B5	Sample 29	18.84		0	
+True	255	B6	Sample 30	19.47		0	
+True	255	B7	Sample 31	19.92		0	
+True	255	B8	Sample 32	19.71		0	
+True	255	B9	Sample 33	19.51		0	
+True	255	B10	Sample 34	19.10		0	
+True	255	B11	Sample 35	19.87		0	
+True	255	B12	Sample 36	19.68		0	
+True	65280	B13	Sample 37			0	
+True	65280	B14	Sample 38			0	
+True	255	B15	Sample 39	19.71		0	
+True	255	B16	Sample 40	19.70		0	
+True	65280	C1	Sample 49			0	
+True	255	C2	Sample 50	17.51		0	
+True	65280	C3	Sample 51			0	
+True	255	C4	Sample 52	19.17		0	
+True	255	C5	Sample 53	17.65		0	
+True	255	C6	Sample 54	18.17		0	
+True	255	C7	Sample 55	17.94		0	
+True	255	C8	Sample 56	18.29		0	
+True	255	C9	Sample 57	18.20		0	
+True	255	C10	Sample 58	17.79		0	
+True	255	C11	Sample 59	18.47		0	
+True	255	C12	Sample 60	18.35		0	
+True	255	C13	Sample 61	35.52		0	
+True	255	C14	Sample 62	37.00		0	> - Late Cp call (last five cycles) has higher uncertainty
+True	255	C15	Sample 63	18.28		0	
+True	255	C16	Sample 64	18.28		0	
+True	255	D1	Sample 73	20.20		0	
+True	255	D2	Sample 74	37.00		0	> - Late Cp call (last five cycles) has higher uncertainty
+True	255	D3	Sample 75	21.07		0	
+True	255	D4	Sample 76	21.24		0	
+True	255	D5	Sample 77	20.21		0	
+True	255	D6	Sample 78	20.56		0	
+True	255	D7	Sample 79	20.59		0	
+True	255	D8	Sample 80	20.34		0	
+True	255	D9	Sample 81	19.94		0	
+True	255	D10	Sample 82	20.25		0	
+True	255	D11	Sample 83	34.26		0	
+True	255	D12	Sample 84	22.84		0	
+True	255	D13	Sample 85	37.00		0	> - Late Cp call (last five cycles) has higher uncertainty
+True	65280	D14	Sample 86			0	
+True	255	D15	Sample 87	20.89		0	
+True	255	D16	Sample 88	20.50		0	
+True	255	E1	Sample 97	24.51		0	
+True	255	E2	Sample 98	21.69		0	
+True	255	E3	Sample 99	24.49		0	
+True	255	E4	Sample 100	24.26		0	
+True	255	E5	Sample 101	25.84		0	
+True	255	E6	Sample 102	23.56		0	
+True	255	E7	Sample 103	26.74		0	
+True	255	E8	Sample 104	24.02		0	
+True	255	E9	Sample 105	24.12		0	
+True	255	E10	Sample 106	23.94		0	
+True	255	E11	Sample 107	25.03		0	
+True	255	E12	Sample 108	25.08		0	
+True	65280	E13	Sample 109			0	
+True	65280	E14	Sample 110			0	
+True	255	E15	Sample 111	23.63		0	
+True	255	E16	Sample 112	24.29		0	
+True	255	F1	Sample 121	23.15		0	
+True	255	F2	Sample 122	23.28		0	
+True	255	F3	Sample 123	24.66		0	
+True	255	F4	Sample 124	24.69		0	
+True	255	F5	Sample 125	24.11		0	
+True	255	F6	Sample 126	24.17		0	
+True	255	F7	Sample 127	28.80		0	
+True	255	F8	Sample 128	24.70		0	
+True	255	F9	Sample 129	24.14		0	
+True	255	F10	Sample 130	24.29		0	
+True	255	F11	Sample 131	24.52		0	
+True	255	F12	Sample 132	25.33		0	
+True	65280	F13	Sample 133			0	
+True	255	F14	Sample 134	37.00		0	> - Late Cp call (last five cycles) has higher uncertainty
+True	255	F15	Sample 135	24.11		0	
+True	255	F16	Sample 136	24.88		0	
+True	255	G1	Sample 145	23.95		0	
+True	255	G2	Sample 146	22.75		0	
+True	255	G3	Sample 147	23.84		0	
+True	255	G4	Sample 148	23.49		0	
+True	255	G5	Sample 149	24.29		0	
+True	255	G6	Sample 150	31.86		0	
+True	255	G7	Sample 151	23.60		0	
+True	255	G8	Sample 152	22.61		0	
+True	255	G9	Sample 153	22.36		0	
+True	255	G10	Sample 154	22.26		0	
+True	255	G11	Sample 155	23.62		0	
+True	255	G12	Sample 156	23.29		0	
+True	65280	G13	Sample 157			0	
+True	65280	G14	Sample 158			0	
+True	255	G15	Sample 159	23.36		0	
+True	255	G16	Sample 160	23.12		0	
