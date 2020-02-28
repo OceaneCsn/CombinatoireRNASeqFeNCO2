@@ -16,6 +16,7 @@ heatmapPerso <- function(normalized.count, genes, conds="all", specie="At", gene
   df$condition <- str_split_fixed(rownames(df), "_", 2)[,1]
   df$exactCondition <- rownames(df)
   data <- gather(data = df,key = gene,value = expression, -condition, -exactCondition)
+  print(head(data))
   exp.heatmap <- ggplot(data = data, mapping = aes(x = exactCondition, y = gene,
                                                    fill = log(expression+0.1))) +
     geom_tile() + xlab(label = "Condition") +
@@ -23,7 +24,6 @@ heatmapPerso <- function(normalized.count, genes, conds="all", specie="At", gene
     theme(axis.title.y = element_blank(),
           axis.text.x = element_blank()) + scale_fill_distiller(palette = "YlGnBu") 
   if(length(geneNames) > 1) {
-    print("coucou")
     exp.heatmap = exp.heatmap + scale_y_discrete(labels=geneNames)
   }
   print(exp.heatmap)

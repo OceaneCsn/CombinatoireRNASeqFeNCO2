@@ -45,6 +45,7 @@ library(visNetwork)
 #self written functions for differential expression
 source("./DEFunctions.R")
 source("./Network_functions.R")
+source("./Visu.R")
 specie = "At"
 ```
 
@@ -180,6 +181,8 @@ https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0012776
 ```{r genie}
 
 library(GENIE3)
+DEG <- read.csv("../DEG_CombinatoireCO2_Fe_N/Arabidopsis/FactorCO2/AmbientCO2_NitrateFe-ElevatedCO2_LowNitrateFe.txt", h = T, sep = "\t")
+sharedBy3 <- as.vector(DEG$ensembl_gene_id)
 
 TF <- read.table("TFs_PlnTFDB.txt", h=T, sep = '\t')
 TF$AGI <- str_split_fixed(TF$Protein.ID, '\\.', 2)[,1]
@@ -189,31 +192,38 @@ for(thr in seq(0.05,0.39, by = 0.05)){
   genie(normalized.count, regressors = intersect(TF$AGI,sharedBy3), targets = sharedBy3, thr = thr)
 }
 
-net <- genie(normalized.count, regressors = intersect(TF$AGI,sharedBy3), targets = sharedBy3, thr = 0.25)
+net <- genie(normalized.count, regressors = intersect(TF$AGI,sharedBy3), targets = sharedBy3, thr = 0.05)
 mat <- net[[2]]
 net <- net[[1]]
+plot.igraph(net, vertex.size=5, vertex.label.cex=0.1, color = V(net)$color)
 data <- toVisNetworkData(net)
 
 
+t <- igraph::graph_from_data_frame(d = data$edges)
+plot.igraph(t)
+t
 ont <- OntologyProfile(V(net)$name, plot=F)
 data$nodes$Ontology <- ont[match(data$nodes$id, ont$ensembl_gene_id),]$external_gene_name
 data$nodes$description <-ont[match(data$nodes$id, ont$ensembl_gene_id),]$description
 
-visNetwork(nodes = data$nodes, edges = data$edges, height = "500px", width = "100%") %>%
-  visEdges(smooth = FALSE) %>% visPhysics(solver = "forceAtlas2Based", timestep = 1, minVelocity=10, maxVelocity = 10, stabilization = F)%>%
+importance <- (degree(net)/max(degree(net))+betweenness(net)/max(betweenness(net)))*0.5
+data$nodes$ranking <- importance[match(data$nodes$id, names(importance))]
+
+
+visNetwork(nodes = data$nodes, edges = data$edges, height = "1000px", width = "100%") %>%
+  visEdges(smooth = FALSE) %>% visPhysics(solver = "forceAtlas2Based", timestep = 0.8, minVelocity=10, maxVelocity = 10, stabilization = F)%>%
   visOptions(selectedBy = c("Ontology"), 
              highlightNearest = TRUE, 
-             nodesIdSelection = TRUE)
+             nodesIdSelection = TRUE) %>% visNodes(size = data$nodes$ranking*20)
 
 V(net)$color <- clusteredGenes[V(net)]
 data <- toVisNetworkData(net)
 
-save(data, file = "./DataNetworkGenieCO2Clusters.RData")
+save(data, file = "./DataNetworkGenieCO2LowNitrate.RData")
 
 visNetwork(nodes = data$nodes, edges = data$edges, height = "500px", width = "100%") %>%
   visEdges(smooth = FALSE) %>% visPhysics(solver = "forceAtlas2Based", timestep = 1, minVelocity=10, maxVelocity = 10, stabilization = F)%>%
   visOptions(selectedBy = "group", 
              highlightNearest = TRUE, 
              nodesIdSelection = TRUE, collapse = TRUE)
-
 ```

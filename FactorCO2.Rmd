@@ -40,11 +40,13 @@ suppressMessages(library(ggplot2, warn.conflicts = F, quietly = T))
 suppressMessages(library(clusterProfiler, warn.conflicts = F, quietly = T))
 suppressMessages(library(enrichplot, warn.conflicts = F, quietly = T))
 suppressMessages(library(ggpubr, warn.conflicts = F, quietly = T))
+suppressMessages(library(HTSFilter, warn.conflicts = F, quietly = T))
 
 #self written functions for differential expression
 source("./DEFunctions.R")
 
-Path = "~/Documents/CombinatoireFeNCO2/DEG_Combinatoire/MicroTom/FactorCO2/"
+Path = "~/Documents/DEG_CombinatoireCO2_Fe_N/ArabidopsisFiltered/FactorCO2/"
+
 ```
 
 
@@ -65,13 +67,20 @@ getLabel("R6")
 getExactCondition("R4")
 getCondition("R4")
 
-keep <- rowSums(data) >= 10
-data <- data[keep,]
+
+## filtrer les genes qui ne sont pas assez exprimés
 group <- sapply(colnames(data), getLabel, with.rep = F)
 colnames(data) <- sapply(colnames(data), getLabel)
+
+filter <- HTSFilter(data, group, s.min=1, s.max=200, s.len=100)
+mat <- filter$filteredData
+data <- mat
+
 head(data)
 dim(data)
 
+
+save(data, file = "./filteredData.RData")
 specie = "At"
 ```
 
@@ -195,14 +204,14 @@ On s'interroge sur l'effet de la double carence fer et nitrate en CO2 ambiant et
 On ne l'avait pas fait car cela fait varer deux facteurs à la fois.
 
 ```{r double carence}
-labels <- c("cnf", "cNF")
-genes5 <- dualDE(data, labels, pval = 0.01)
-labels <- c("Cnf", "CNF")
-genes6 <- dualDE(data, labels, pval = 0.01)
-
-doubleInt <- list("ambiant CO2" = genes5$gene_id, "elevanted CO2" =  genes6$gene_id)
-ggVennDiagram(doubleInt)
-OntologyProfile(intersect(genes5$gene_id, genes6$gene_id), specie = specie)
+# labels <- c("cnf", "cNF")
+# genes5 <- dualDE(data, labels, pval = 0.01)
+# labels <- c("Cnf", "CNF")
+# genes6 <- dualDE(data, labels, pval = 0.01)
+# 
+# doubleInt <- list("ambiant CO2" = genes5$gene_id, "elevanted CO2" =  genes6$gene_id)
+# ggVennDiagram(doubleInt)
+# OntologyProfile(intersect(genes5$gene_id, genes6$gene_id), specie = specie)
 ```
 On trouve énormément de gènes, ce qui est cohérent car le nitrate et le fer pris séparément avaient déjà beaucoup d'effet.
 
@@ -245,58 +254,58 @@ Il semble qu'il y ait quand même pas mal de différences entre ces transcriptom
 On va faire les corrélations d'expression entre ces deux conditions.
 
 ```{r corr}
-
-scatter <- function(df, x, y) {
-    sp <- ggplot(df, aes(log(df[, x]), log(df[, y]))) + geom_bin2d(bins = 70) + scale_fill_gradient2() + 
-        theme(legend.position = "none") + labs(x = x, y = y)
-    return(sp)
-}
-
-comps <- labels <- c("cNF", "CNF")
-diffs <- c()
-# correlations between ambient and elevated
-for( ambient in colnames(data)[grepl("cNF", colnames(data))]){
-  for( elevated in colnames(data)[grepl("CNF", colnames(data))]){
-    diffs = c(diffs, cor(data[ambient], data[elevated]))
-  }
-}
-
-diffs_other <- c()
-for( ambient in colnames(data)[grepl("cNF", colnames(data))]){
-  for( elevated in colnames(data)[!grepl("NF", colnames(data))]){
-    diffs_other = c(diffs_other, cor(data[ambient], data[elevated]))
-  }
-}
-
-# correlations within ambien and elevated
-sames <- c()
-samples <- colnames(data)[grepl("cNF", colnames(data))]
-sames <- c(sames, cor(data[, samples[1]], data[, samples[2]]), cor(data[, samples[1]], 
-        data[, samples[3]]), cor(data[, samples[2]], data[, samples[3]]))
-samples <- colnames(data)[grepl("CNF", colnames(data))]
-sames <- c(sames, cor(data[, samples[1]], data[, samples[2]]), cor(data[, samples[1]], 
-        data[, samples[3]]), cor(data[, samples[2]], data[, samples[3]]))
-sames
-
-df <- data.frame("Same condition" = c(sames, rep(NA, 3)), "Ambient vs Elevated" = diffs)
-res <- na.omit(melt(df))
-
-# comparisons
-ggplot(data = res, aes(x=variable, y=value, fill=variable)) + geom_boxplot(binaxis = "y", alpha = 0.4, stackdir = "center") +
-    theme(axis.text.x = element_text(angle = 320,
-                                     hjust = 0, colour = "grey50"), plot.title = element_text( size = 14, face = "bold")) +
-    ggtitle("Correlation for expression accross conditions") + geom_dotplot(binaxis = "y", stackdir = "center") + 
-  stat_compare_means(method = "wilcox.test", hide.ns = FALSE, label = "p.signif",
-                     symnum.args = list(cutpoints = c(0, 0.0001, 0.001, 0.01, 0.05, 1), symbols = c("****", "***", "**", "*", "ns")))
-
-res <- rbind.data.frame(res, data.frame("variable" = rep("cNF vs all others except CNF", length(diffs_other)), "value" = diffs_other))
-
-ggplot(data = res, aes(x=variable, y=value, fill=variable)) + geom_boxplot(binaxis = "y", alpha = 0.4, stackdir = "center") +
-    theme(axis.text.x = element_text(angle = 320,
-                                     hjust = 0, colour = "grey50"), plot.title = element_text( size = 14, face = "bold")) +
-    ggtitle("Correlation for expression accross conditions") + geom_dotplot(binaxis = "y", stackdir = "center") + 
-  stat_compare_means(method = "wilcox.test", hide.ns = FALSE, label = "p.signif",
-                     symnum.args = list(cutpoints = c(0, 0.0001, 0.001, 0.01, 0.05, 1), symbols = c("****", "***", "**", "*", "ns")))
+# 
+# scatter <- function(df, x, y) {
+#     sp <- ggplot(df, aes(log(df[, x]), log(df[, y]))) + geom_bin2d(bins = 70) + scale_fill_gradient2() + 
+#         theme(legend.position = "none") + labs(x = x, y = y)
+#     return(sp)
+# }
+# 
+# comps <- labels <- c("cNF", "CNF")
+# diffs <- c()
+# # correlations between ambient and elevated
+# for( ambient in colnames(data)[grepl("cNF", colnames(data))]){
+#   for( elevated in colnames(data)[grepl("CNF", colnames(data))]){
+#     diffs = c(diffs, cor(data[ambient], data[elevated]))
+#   }
+# }
+# 
+# diffs_other <- c()
+# for( ambient in colnames(data)[grepl("cNF", colnames(data))]){
+#   for( elevated in colnames(data)[!grepl("NF", colnames(data))]){
+#     diffs_other = c(diffs_other, cor(data[ambient], data[elevated]))
+#   }
+# }
+# 
+# # correlations within ambien and elevated
+# sames <- c()
+# samples <- colnames(data)[grepl("cNF", colnames(data))]
+# sames <- c(sames, cor(data[, samples[1]], data[, samples[2]]), cor(data[, samples[1]], 
+#         data[, samples[3]]), cor(data[, samples[2]], data[, samples[3]]))
+# samples <- colnames(data)[grepl("CNF", colnames(data))]
+# sames <- c(sames, cor(data[, samples[1]], data[, samples[2]]), cor(data[, samples[1]], 
+#         data[, samples[3]]), cor(data[, samples[2]], data[, samples[3]]))
+# sames
+# 
+# df <- data.frame("Same condition" = c(sames, rep(NA, 3)), "Ambient vs Elevated" = diffs)
+# res <- na.omit(melt(df))
+# 
+# # comparisons
+# ggplot(data = res, aes(x=variable, y=value, fill=variable)) + geom_boxplot(binaxis = "y", alpha = 0.4, stackdir = "center") +
+#     theme(axis.text.x = element_text(angle = 320,
+#                                      hjust = 0, colour = "grey50"), plot.title = element_text( size = 14, face = "bold")) +
+#     ggtitle("Correlation for expression accross conditions") + geom_dotplot(binaxis = "y", stackdir = "center") + 
+#   stat_compare_means(method = "wilcox.test", hide.ns = FALSE, label = "p.signif",
+#                      symnum.args = list(cutpoints = c(0, 0.0001, 0.001, 0.01, 0.05, 1), symbols = c("****", "***", "**", "*", "ns")))
+# 
+# res <- rbind.data.frame(res, data.frame("variable" = rep("cNF vs all others except CNF", length(diffs_other)), "value" = diffs_other))
+# 
+# ggplot(data = res, aes(x=variable, y=value, fill=variable)) + geom_boxplot(binaxis = "y", alpha = 0.4, stackdir = "center") +
+#     theme(axis.text.x = element_text(angle = 320,
+#                                      hjust = 0, colour = "grey50"), plot.title = element_text( size = 14, face = "bold")) +
+#     ggtitle("Correlation for expression accross conditions") + geom_dotplot(binaxis = "y", stackdir = "center") + 
+#   stat_compare_means(method = "wilcox.test", hide.ns = FALSE, label = "p.signif",
+#                      symnum.args = list(cutpoints = c(0, 0.0001, 0.001, 0.01, 0.05, 1), symbols = c("****", "***", "**", "*", "ns")))
 ```
  cNF et CNF semblent bien plus proches entre eux que cNF ne l'est avec tous les autres.
 

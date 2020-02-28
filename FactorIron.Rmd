@@ -43,7 +43,7 @@ library(reshape2)
 
 #self written functions for differential expression
 source("./DEFunctions.R")
-Path = "~/Documents/CombinatoireFeNCO2/DEG_Combinatoire/MicroTom/FactorIron/"
+Path = "~/Documents/DEG_CombinatoireCO2_Fe_N/ArabidopsisFiltered/FactorIron/"
 
 ```
 
@@ -71,6 +71,8 @@ group <- sapply(colnames(data), getLabel, with.rep = F)
 colnames(data) <- sapply(colnames(data), getLabel)
 head(data)
 dim(data)
+
+load("./filteredData.RData")
 
 specie = "At"
 ```

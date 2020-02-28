@@ -44,7 +44,7 @@ suppressMessages(library(enrichplot, warn.conflicts = F, quietly = T))
 #self written functions for differential expression
 source("./DEFunctions.R")
 
-Path = "~/Documents/CombinatoireFeNCO2/DEG_Combinatoire/MicroTom/FactorNitrate/"
+Path = "~/Documents/DEG_CombinatoireCO2_Fe_N/ArabidopsisFiltered/FactorNitrate/"
 
 ```
 
@@ -56,24 +56,27 @@ On labelle les conditions avec le code suivant : lettre majuscule pour le niveau
 
 ```{r data}
 #quantification file
-data <- read.csv("quantifFiles/QuantifGenesTomate.csv", h = T, sep = ',')
-rownames(data) <- data$Gene
-genes = which(!(grepl("__", rownames(data))))
-not_quant = data[which((grepl("__", rownames(data)))),]
-data = data[genes,grepl('R', colnames(data))]
+# data <- read.csv("quantifFiles/QuantifGenesTomate.csv", h = T, sep = ',')
+# rownames(data) <- data$Gene
+# genes = which(!(grepl("__", rownames(data))))
+# not_quant = data[which((grepl("__", rownames(data)))),]
+# data = data[genes,grepl('R', colnames(data))]
+# 
+# getLabel("R6")
+# getExactCondition("R4")
+# getCondition("R4")
+# 
+# keep <- rowSums(data) >= 10
+# data <- data[keep,]
+# group <- sapply(colnames(data), getLabel, with.rep = F)
+# colnames(data) <- sapply(colnames(data), getLabel)
+# head(data)
+# dim(data)
 
-getLabel("R6")
-getExactCondition("R4")
-getCondition("R4")
 
-keep <- rowSums(data) >= 10
-data <- data[keep,]
-group <- sapply(colnames(data), getLabel, with.rep = F)
-colnames(data) <- sapply(colnames(data), getLabel)
-head(data)
-dim(data)
+load("filteredData.RData")
 
-specie = "Sl"
+specie = "At"
 #getExpression("AT1G01010")
 ```
 

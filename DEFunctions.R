@@ -122,6 +122,7 @@ writeGenes <- function(export, labels, ont, DEresult){
   #write.table(x = ont, file = export, quote = F, sep = '\t', row.names = F)
   ont$lfc <- DEresult[match(ont$ensembl_gene_id,DEresult$gene_id),]$m.value
   ont$adj.p.value <- DEresult[match(ont$ensembl_gene_id,DEresult$gene_id),]$q.value
+  ont$meanNormalizedExpression <- DEresult[match(ont$ensembl_gene_id,DEresult$gene_id),]$a.value
   ont <- ont[order(ont$adj.p.value),]
   write.table(x = ont, file = paste0(export, translateToOSX(labels), '.txt'), quote = F, sep = '\t', row.names = F)
   return(ont)
@@ -146,10 +147,10 @@ translateToOSX <- function(labels){
 
 ########################################################## sample matching
 
-dualDE <- function(data, labels, pval=0.01, method="edger", flc_filter = 0, plot=T){
+dualDE <- function(data, labels, pval=0.01, method="edger", lfc_filter = 0, plot=T){
   # selecting the right labels for pairwise comparison
   headers <- c(colnames(data)[(grepl(labels[1], colnames(data)))] , colnames(data)[grepl(labels[2], colnames(data))])
-  data <- data[headers]
+  data <- data[,headers]
   group <- str_split_fixed(colnames(data), "_", 2)[,1]
   group <- factor(group)
   group <- relevel(group, labels[1])
@@ -171,7 +172,7 @@ dualDE <- function(data, labels, pval=0.01, method="edger", flc_filter = 0, plot
   tcc <- estimateDE(tcc, test.method = method, FDR = pval, design = model.matrix(~group))
   result <- getResult(tcc, sort = TRUE)
 
-  DEgenes <- subset(result,estimatedDEG==1 & abs(m.value) > flc_filter)
+  DEgenes <- subset(result,estimatedDEG==1 & abs(m.value) > lfc_filter)
   DEgenes$upreg = ifelse(DEgenes$m.value > 0, 1, 0)
   print(paste(dim(DEgenes)[1], " genes DE"))
   head(result)
@@ -180,15 +181,11 @@ dualDE <- function(data, labels, pval=0.01, method="edger", flc_filter = 0, plot
       scale_fill_discrete("Set2") + geom_point(alpha=0.7) + ggtitle(paste0("M.A Plot : ", labels[2], " vs ", labels[1])) + xlab("Average expression") + ylab("Log Fold Change")+ theme(
         plot.title = element_text(size = 20, face="bold")) + labs(color = "Is DE"))
     
-    
     print(ggplot(data = result, aes(m.value, -log10(q.value), color=factor(estimatedDEG))) +
       scale_fill_discrete("Set2") + geom_point(alpha=0.7) + ggtitle(paste0("Vulcano Plot : ", labels[2], " vs ", labels[1])) +
       xlab("Log Fold Change") + ylab("-Log(adj.pvalue)") + theme(
         plot.title = element_text(size = 20, face="bold")) + labs(color = "Is DE"))
-    
-    
     plotMDS(normalized.count, main="Multidimensional scaling plot of distances between gene expression profiles")
-    #plot(tcc)
     heatmap(normalized.count[DEgenes$gene_id,])
   }
   return(DEgenes)
